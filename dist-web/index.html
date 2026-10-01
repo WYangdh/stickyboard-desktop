@@ -1,0 +1,2915 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20x='3'%20y='3'%20width='26'%20height='26'%20rx='5'%20fill='%23ffe9a8'/%3E%3Cpath%20d='M9%2012h14M9%2018h9'%20stroke='%235a4a12'%20stroke-width='2.6'%20stroke-linecap='round'/%3E%3C/svg%3E">
+<title>便签台 · Sticky Board</title>
+<meta name="description" content="现代风格的纯前端便签应用：无限新建、拖拽移动、角落缩放、到期提醒、颜色自定义、明暗主题、本地持久化。">
+<style>
+/* ============ 1. 主题 Tokens 与基础 ============ */
+:root{
+  --bg:#f4f5f8; --dots:rgba(15,23,42,.055);
+  --panel:rgba(255,255,255,.78); --panel-bd:rgba(15,23,42,.09);
+  --text:#1b1f26; --text-2:#5c6673; --text-3:#8a94a1;
+  --accent:#2f6bff; --accent-ink:#fff;
+  --danger:#d84434;
+  --shadow-s:0 1px 2px rgba(16,24,40,.07);
+  --shadow-l:0 1px 2px rgba(16,24,40,.06),0 16px 32px -14px rgba(16,24,40,.22);
+  --r-sm:8px; --r-md:14px; --r-xl:22px;
+  --bar-h:60px;
+  --note-filter:none;
+  color-scheme:light;
+}
+html[data-theme="dark"]{
+  --bg:#0e1114; --dots:rgba(255,255,255,.05);
+  --panel:rgba(23,27,33,.72); --panel-bd:rgba(255,255,255,.1);
+  --text:#e7eaee; --text-2:#a2abb6; --text-3:#717984;
+  --accent:#6c90ff; --accent-ink:#0e1114;
+  --danger:#ff6a58;
+  --shadow-l:0 1px 2px rgba(0,0,0,.4),0 18px 38px -14px rgba(0,0,0,.6);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  background:radial-gradient(var(--dots) 1.1px,transparent 1.1px) 0 0/22px 22px,var(--bg);
+  color:var(--text); overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+input,textarea{font:inherit;color:inherit}
+.ico{width:18px;height:18px;flex:none}
+kbd{
+  font:600 11px/1.6 ui-monospace,Menlo,Consolas,monospace;
+  background:color-mix(in oklab,var(--text) 8%,transparent);
+  border:1px solid color-mix(in oklab,var(--text) 14%,transparent);
+  border-bottom-width:2px;border-radius:6px;padding:1px 5px;color:var(--text-2);
+}
+::selection{background:color-mix(in oklab,var(--accent) 30%,transparent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+<style>
+/* ============ 2. 顶部工具栏 ============ */
+.bar{
+  position:fixed; inset:0 0 auto 0; height:var(--bar-h); z-index:50;
+  display:flex; align-items:center; gap:14px; padding:0 clamp(12px,2vw,20px);
+  background:var(--panel); border-bottom:1px solid var(--panel-bd);
+  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+}
+.bar-brand{display:flex;align-items:center;gap:10px;flex:none}
+.brand-dot{
+  width:26px;height:26px;border-radius:9px;flex:none;
+  background:conic-gradient(from 220deg,#ffb340,#ffe86b,#8be08b,#6cc4ff,#c9a6ff,#ffb340);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);
+}
+.brand-txt{display:flex;flex-direction:column;line-height:1.15}
+.brand-txt strong{font-size:15px;letter-spacing:.5px}
+.brand-sub{font-size:11px;color:var(--text-3)}
+.brand-ver{font-size:11px;font-weight:600;color:var(--text-3);letter-spacing:.3px;margin-left:7px}
+
+.bar-search{
+  flex:1; max-width:480px; margin:0 auto;
+  display:flex; align-items:center; gap:8px;
+  background:color-mix(in oklab,var(--text) 6%,transparent);
+  border:1px solid transparent; border-radius:var(--r-xl);
+  padding:0 14px; height:38px; color:var(--text-3);
+  transition:border-color .18s,background .18s;
+}
+.bar-search:focus-within{border-color:var(--accent);background:transparent}
+.bar-search input{flex:1;min-width:0;border:0;background:none;outline:none;color:var(--text);font-size:14px}
+.bar-search input::placeholder{color:var(--text-3)}
+.bar-search input::-webkit-search-cancel-button{-webkit-appearance:none}
+.search-count{font-size:12px;color:var(--text-3);flex:none}
+.s-clear{
+  flex:none;width:20px;height:20px;border-radius:99px;display:grid;place-items:center;
+  color:var(--text-3);background:color-mix(in oklab,var(--text) 8%,transparent);
+  transition:background .15s,color .15s,transform .12s;
+}
+.s-clear[hidden]{display:none}
+.s-clear svg{width:11px;height:11px}
+.s-clear:hover{color:var(--text);background:color-mix(in oklab,var(--text) 15%,transparent)}
+.s-clear:active{transform:scale(.9)}
+
+.bar-actions{display:flex;align-items:center;gap:8px;flex:none;margin-left:auto}
+.btn{
+  display:inline-flex;align-items:center;gap:7px;
+  height:38px;padding:0 15px;border-radius:var(--r-xl);
+  font-size:13.5px;font-weight:600;color:var(--text);
+  border:1px solid transparent; white-space:nowrap;
+  transition:transform .12s,background .18s,box-shadow .18s;
+}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--accent);color:var(--accent-ink);box-shadow:var(--shadow-s)}
+.btn-primary:hover{filter:brightness(1.07)}
+.btn-ghost{width:38px;padding:0;justify-content:center;
+  background:color-mix(in oklab,var(--text) 6%,transparent)}
+.btn-ghost:hover{background:color-mix(in oklab,var(--text) 11%,transparent)}
+html:not([data-theme="dark"]) .ico-moon{display:none}
+html[data-theme="dark"] .ico-sun{display:none}
+
+.statusline{
+  position:fixed;top:calc(var(--sticky-top-h, calc(var(--bar-h) + 8px)));left:50%;transform:translateX(-50%);
+  z-index:0;font-size:12px;color:var(--text-3);pointer-events:none;
+  background:var(--panel);border:1px solid var(--panel-bd);border-radius:99px;
+  padding:3px 12px;backdrop-filter:blur(8px);display:none;
+}
+.statusline.show{display:block}
+@media (max-width:760px) and (min-width:641px){
+  .bar-brand .brand-txt,.btn-primary span{display:none}
+  .btn-primary{padding:0 11px}
+}
+@media (max-width:640px){
+  :root{--safe-top:env(safe-area-inset-top,0px)}
+  html{touch-action:manipulation}
+  .bar{flex-wrap:wrap;height:auto;min-height:var(--bar-h);padding:6px 8px;
+       padding-top:calc(6px + var(--safe-top));gap:8px;row-gap:5px}
+  .bar-brand .brand-txt,.btn-primary span{display:none}
+  .btn-primary{padding:0 11px;height:34px}
+  .btn-ghost{width:34px;height:34px}
+  .bar-search{order:3;flex:1 1 100%;max-width:none;height:34px}
+  .bar-actions{margin-left:auto;overflow-x:auto;scrollbar-width:none;max-width:100%;padding:0 2px 2px}
+  .bar-actions::-webkit-scrollbar{display:none}
+  .modal{width:min(94vw,440px);max-height:86vh;overflow-y:auto;padding:18px}
+  .shelf{left:8px;right:8px;bottom:6px}
+  .arch-card{width:156px;min-height:86px;max-height:104px}
+  .menu{max-width:calc(100vw - 16px)}
+}
+</style>
+<style>
+/* ============ 3. 画布与便签卡片 ============ */
+.canvas{position:fixed;inset:0;z-index:1}
+.note{
+  position:absolute; z-index:1; display:flex; flex-direction:column;
+  background:var(--nc,#ffe9a8); color:var(--ink,#232a31);
+  border-radius:4px 4px var(--r-sm) var(--r-sm);
+  box-shadow:var(--shadow-l);
+  transform:rotate(var(--rot,0deg));
+  transition:box-shadow .18s,outline-color .18s,opacity .2s,transform .16s ease-out;
+  outline:2px solid transparent; outline-offset:2px;
+}
+/* 悬停 / 键盘聚焦时纸面回正：滚动条垂直无锯齿，阅读更清晰 */
+.note:hover,.note:focus-within{transform:rotate(0deg)}
+/* 细滚动条：即使瞬间处于微旋状态也不产生锯齿感 */
+.md-view,.note-text{scrollbar-width:thin;scrollbar-color:color-mix(in oklab,var(--ink,#000) 28%,transparent) transparent}
+.md-view::-webkit-scrollbar,.note-text::-webkit-scrollbar{width:5px;height:5px}
+.md-view::-webkit-scrollbar-track,.note-text::-webkit-scrollbar-track{background:transparent}
+.md-view::-webkit-scrollbar-thumb,.note-text::-webkit-scrollbar-thumb{
+  background:color-mix(in oklab,var(--ink,#000) 26%,transparent);border-radius:99px}
+.md-view::-webkit-scrollbar-thumb:hover,.note-text::-webkit-scrollbar-thumb:hover{
+  background:color-mix(in oklab,var(--ink,#000) 42%,transparent)}
+.note.selected{outline-color:var(--accent)}
+.note.dragging{box-shadow:0 2px 4px rgba(0,0,0,.12),0 26px 48px -16px rgba(0,0,0,.34)}
+.note.dim{opacity:.14;pointer-events:none}
+.note.ping{animation:ping 1s ease-in-out 4}
+@keyframes ping{
+  0%,100%{box-shadow:var(--shadow-l)}
+  50%{box-shadow:0 0 0 10px color-mix(in oklab,var(--accent) 26%,transparent)}
+}
+
+.note-grip{
+  height:30px;flex:none;display:flex;align-items:center;gap:6px;
+  padding:0 6px 0 10px;cursor:grab;user-select:none;
+  background:color-mix(in oklab,var(--ink,#000) 7%,transparent);
+  border-radius:4px 4px 0 0;
+}
+.note-grip:active{cursor:grabbing}
+.note-date{font-size:10.5px;opacity:.55;white-space:nowrap;flex:none}
+.grip-spacer{flex:1 1 auto;min-width:4px}
+.note-clock{
+  flex:none;display:none;align-items:center;gap:3px;max-width:46%;
+  font-size:10.5px;padding:1px 7px;border-radius:99px;
+  background:color-mix(in oklab,var(--ink,#000) 10%,transparent);
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+}
+.note-clock .ico{width:11px;height:11px;flex:none}
+.note-clock.overdue{background:color-mix(in oklab,#d84434 88%,black 4%);color:#fff}
+.note-clock[hidden]{display:none!important}
+.note:not(.collapsed) .note-title{display:none}
+.note-pin-btn{
+  width:22px;height:22px;flex:none;border-radius:6px;margin-right:2px;
+  display:grid;place-items:center;color:currentColor;opacity:.38;
+  transition:opacity .15s,color .15s,transform .12s;
+}
+.note-pin-btn:hover{opacity:.8;background:color-mix(in oklab,var(--ink,#000) 10%,transparent)}
+.note-pin-btn:active{transform:scale(.92)}
+.note-pin-btn.on{opacity:1;color:#c0392b}
+html[data-theme="dark"] .note-pin-btn.on{color:#ff6a58}
+.brand-ver{font-size:11px;font-weight:600;color:var(--text-3);letter-spacing:.3px;margin-left:7px}
+.note-menu{
+  width:24px;height:24px;flex:none;border-radius:7px;font-weight:700;
+  display:grid;place-items:center;font-size:15px;line-height:1;
+  color:currentColor;opacity:.55;
+}
+.note-menu:hover{opacity:1;background:color-mix(in oklab,var(--ink,#000) 10%,transparent)}
+
+.note-text{
+  flex:1;width:100%;resize:none;border:0;outline:none;background:transparent;
+  padding:10px 12px 6px;font-size:14px;line-height:1.55;color:inherit;
+  caret-color:color-mix(in oklab,var(--ink) 70%,transparent);
+  overflow-y:auto;user-select:text;
+}
+.note-text::placeholder{color:color-mix(in oklab,var(--ink) 40%,transparent)}
+.note-text[readonly]{cursor:default}
+
+/* ---------- 折叠 / 标题 / Markdown 渲染 ---------- */
+.note-fold{
+  width:20px;height:20px;flex:none;border-radius:6px;margin-right:2px;
+  display:grid;place-items:center;opacity:.5;color:currentColor;
+}
+.note-fold:hover{opacity:1;background:color-mix(in oklab,var(--ink,#000) 10%,transparent)}
+.note-fold svg{width:12px;height:12px;transition:transform .18s}
+.note:not(.collapsed) .note-fold svg{transform:rotate(90deg)}
+.note.arr-move{transition:left .34s cubic-bezier(.22,.9,.34,1),top .34s cubic-bezier(.22,.9,.34,1),width .34s,height .34s,box-shadow .18s}
+.note-title{
+  font-size:12px;font-weight:700;letter-spacing:.2px;
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  display:none;
+}
+.note.collapsed .note-title{display:block;flex:0 1 auto;min-width:24px}
+.note.collapsed .note-date{display:none}
+.note.collapsed .note-clock{display:inline-flex}
+.note.collapsed .note-foot,
+.note.collapsed .note-resize,
+.note.collapsed .note-body{display:none}
+.note.collapsed .note-grip{border-radius:4px 4px var(--r-sm) var(--r-sm)}
+.note-body{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
+.md-view{
+  flex:1;overflow-y:auto;padding:10px 12px 6px;font-size:14px;line-height:1.55;
+  color:inherit;user-select:text;cursor:text;min-height:0;word-break:break-word;
+}
+.md-view[hidden],.note-text[hidden]{display:none}
+.md-view>*:first-child{margin-top:0}
+.md-view p{margin:0 0 8px}
+.md-view h1,.md-view h2,.md-view h3{margin:10px 0 6px;line-height:1.35}
+.md-view h1{font-size:17px}.md-view h2{font-size:15.5px}.md-view h3{font-size:14.5px}
+.md-view ul,.md-view ol{margin:0 0 8px;padding-left:20px}
+.md-view li{margin:2px 0}
+.md-view li.task{list-style:none;margin-left:-18px;display:flex;gap:7px;align-items:flex-start}
+.md-view li.task input{margin-top:3px;accent-color:var(--ink,#000);cursor:pointer}
+.md-view li.task.done>span{opacity:.55;text-decoration:line-through}
+.md-view blockquote{
+  margin:0 0 8px;padding:2px 0 2px 10px;border-left:3px solid color-mix(in oklab,var(--ink) 35%,transparent);
+  color:color-mix(in oklab,var(--ink) 78%,transparent);
+}
+.md-view hr{border:0;border-top:1px solid color-mix(in oklab,var(--ink) 25%,transparent);margin:10px 0}
+.md-view code{
+  font:12px/1.55 ui-monospace,Menlo,Consolas,monospace;
+  background:color-mix(in oklab,var(--ink) 10%,transparent);
+  padding:1px 5px;border-radius:5px;
+}
+.md-view pre{margin:0 0 8px;background:color-mix(in oklab,var(--ink) 8%,transparent);
+  border-radius:8px;padding:8px 10px;overflow-x:auto}
+.md-view pre code{background:none;padding:0}
+.md-view a{color:inherit;text-decoration:underline;text-underline-offset:2px}
+.md-view del{opacity:.6}
+.md-view img{max-width:100%;border-radius:6px;display:block;margin:4px 0}
+.md-view table{border-collapse:collapse;margin:0 0 8px;font-size:12.5px;width:100%}
+.md-view th,.md-view td{border:1px solid color-mix(in oklab,var(--ink) 22%,transparent);padding:3px 8px;text-align:left;vertical-align:top;word-break:break-word}
+.md-view th{background:color-mix(in oklab,var(--ink) 7%,transparent);font-weight:700}
+
+.note-foot{
+  flex:none;min-height:26px;display:flex;align-items:center;gap:6px;
+  padding:0 10px 7px;font-size:11px;opacity:.9;cursor:pointer;
+}
+.note-foot:empty{display:none}
+.remind{
+  display:inline-flex;align-items:center;gap:4px;
+  max-width:100%;padding:2px 8px;border-radius:99px;
+  background:color-mix(in oklab,var(--ink) 9%,transparent);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;
+}
+.remind .ico{width:12px;height:12px}
+.remind.overdue{
+  background:color-mix(in oklab,#d84434 88%,black 4%);color:#fff;
+}
+@keyframes blink{50%{opacity:.55}}
+
+.note-resize{
+  position:absolute;right:1px;bottom:1px;width:20px;height:20px;
+  cursor:nwse-resize;border-radius:0 0 var(--r-sm) 0;touch-action:none;
+}
+.note-resize::after{
+  content:"";position:absolute;right:4px;bottom:4px;width:8px;height:8px;
+  border-right:2px solid currentColor;border-bottom:2px solid currentColor;
+  opacity:.38;border-radius:0 0 3px 0;
+}
+.note:hover .note-resize::after{opacity:.65}
+@media (pointer:coarse){.note-resize{width:30px;height:30px}}
+</style>
+<style>
+/* ============ v9：沉淀 / 连线 / 待办 / 红点 ============ */
+.note.stale{opacity:.62;filter:saturate(.55) contrast(.96)}
+.note.stale:hover,.note.stale.selected,.note.stale:focus-within{opacity:1;filter:none}
+.edge-layer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible}
+.edge-layer path{pointer-events:stroke;cursor:pointer;fill:none;
+  stroke:color-mix(in oklab,var(--text) 34%,transparent);stroke-width:1.6;stroke-dasharray:1 5;stroke-linecap:round}
+.edge-layer path:hover{stroke:var(--danger);stroke-dasharray:none;stroke-width:2}
+.edge-layer.edge-anim path{transition:d .34s cubic-bezier(.22,.9,.34,1)}
+body.linking .canvas{cursor:crosshair}
+.note.link-src{outline:2px dashed var(--accent)!important;outline-offset:3px}
+.btn-ghost.on{color:var(--accent);background:color-mix(in oklab,var(--accent) 14%,transparent)}
+.export-dot{position:absolute;top:7px;right:7px;width:7px;height:7px;border-radius:99px;background:var(--danger);
+  box-shadow:0 0 0 2px var(--panel);animation:blink 1.8s ease-in-out infinite}
+#btn-export{position:relative}
+#btn-todo{position:relative}
+.note.collapsed .note-grip{height:36px}
+
+/* ============ v10 归档架 ============ */
+.shelf{position:absolute;left:12px;right:12px;bottom:8px;z-index:4;display:flex;flex-direction:column;gap:8px}
+.shelf[hidden]{display:none}
+.shelf-bar{
+  display:flex;flex-direction:row-reverse;align-items:center;gap:10px;min-height:34px;padding:4px 12px;
+  background:var(--panel);border:1px solid var(--panel-bd);border-radius:99px;
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:var(--shadow-s);
+  font-size:12.5px;color:var(--text-2);
+}
+.s-toggle{display:inline-flex;align-items:center;gap:8px;color:var(--text-2);font-weight:600}
+.s-toggle b{color:var(--text);font-weight:800}
+.s-caret{transition:transform .2s}
+.s-caret.up{transform:rotate(180deg)}
+.s-hint{font-size:11px;color:var(--danger);text-align:center}
+.shelf-row{display:flex;flex-direction:row-reverse;gap:10px;overflow-x:auto;padding:8px 6px 2px;scrollbar-width:thin}
+.shelf-row[hidden]{display:none}
+.arch-card{
+  position:relative;flex:none;width:184px;min-height:96px;max-height:118px;overflow:hidden;text-align:left;
+  background:var(--nc);color:var(--ink);border-radius:10px;padding:9px 11px;
+  box-shadow:var(--shadow-l);display:flex;flex-direction:column;gap:3px;
+  --nc:#ffe9a8;--ink:#232a31;
+}
+.arch-card:hover{transform:translateY(-3px)}
+.arch-card b{font-size:12.5px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.arch-card .a-sub{font-size:11px;opacity:.68;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.arch-card .a-date{font-size:10px;opacity:.5;margin-top:auto}
+.arch-card.has-due{outline:2px solid #c0392b;outline-offset:-2px}
+
+/* ============ v14 语法配色主题（marktext 风：one-dark / gruvbox-light，色值取自上传主题文件） ============ */
+.note-theme-btn{
+  width:20px;height:20px;flex:none;margin-right:2px;border-radius:6px;display:grid;place-items:center;
+  color:currentColor;opacity:.42;transition:opacity .15s,background .15s;
+}
+.note-theme-btn svg{width:12px;height:12px}
+.note-theme-btn:hover{opacity:.85;background:color-mix(in oklab,var(--ink,#000) 10%,transparent)}
+.note-theme-btn.is-on{opacity:1}
+
+/* One Dark（深色卡） */
+.note.thm-onedark{
+  background:#282c34;color:#abb2bf;
+  --nc:#282c34; --ink:#abb2bf;   /* 兜底变量供既有 mix 规则用 */
+  --h1:#e06c75; --h2:#61afef; --h3:#98c379; --h4:#56b6c2; --h5:#c678dd; --h6:#e5c07b;
+  --strong:#e2c08d; --em:#c678dd; --del:rgba(157,165,180,.55); --link:#61afef;
+  --quote:#e2c08d; --quote-t:rgba(157,165,180,.66); --hr:#4b5263; --marker:#e06c75;
+  --code:#e5c07b; --code-bg:#3a3f4b; --pre-bg:#21252b; --pre-fg:#abb2bf; --tbl-bd:#4b5263; --th-bg:rgba(255,255,255,.05);
+}
+/* Gruvbox Light（浅色卡） */
+.note.thm-gruvbox{
+  background:#fbf1c7;color:#3c3836;
+  --nc:#fbf1c7; --ink:#3c3836;
+  --h1:#cc241d; --h2:#d79921; --h3:#98971a; --h4:#458588; --h5:#b16286; --h6:#689d6a;
+  --strong:#3c3836; --em:#af3a03; --del:rgba(102,92,84,.55); --link:#458588;
+  --quote:#928374; --quote-t:rgba(60,56,54,.62); --hr:#bdae9d; --marker:#d65d0e;
+  --code:#b57614; --code-bg:#ebdbb2; --pre-bg:#ebdbb2; --pre-fg:#3c3836; --tbl-bd:#d9c79c; --th-bg:rgba(0,0,0,.05);
+}
+/* 令牌消费层（与未选主题互不干扰；specificity 高于基础规则，后置生效） */
+.note.thm-onedark .md-view h1,.note.thm-gruvbox .md-view h1{color:var(--h1)}
+.note.thm-onedark .md-view h2,.note.thm-gruvbox .md-view h2{color:var(--h2)}
+.note.thm-onedark .md-view h3,.note.thm-gruvbox .md-view h3{color:var(--h3)}
+.note.thm-onedark .md-view{color:#abb2bf}
+.note.thm-gruvbox .md-view{color:#3c3836}
+.note.thm-onedark .md-view strong,.note.thm-gruvbox .md-view strong{color:var(--strong)}
+.note.thm-onedark .md-view em,.note.thm-gruvbox .md-view em{color:var(--em)}
+.note.thm-onedark .md-view del,.note.thm-gruvbox .md-view del{color:var(--del)}
+.note.thm-onedark .md-view a,.note.thm-gruvbox .md-view a{color:var(--link)}
+.note.thm-onedark .md-view blockquote,.note.thm-gruvbox .md-view blockquote{color:var(--quote-t);border-left-color:var(--quote)}
+.note.thm-onedark .md-view hr,.note.thm-gruvbox .md-view hr{border-top-color:var(--hr)}
+.note.thm-onedark .md-view li,.note.thm-gruvbox .md-view li{color:inherit}
+.note.thm-onedark .md-view ul li::marker,.note.thm-gruvbox .md-view ul li::marker,
+.note.thm-onedark .md-view ol li::marker,.note.thm-gruvbox .md-view ol li::marker{color:var(--marker)}
+.note.thm-onedark .md-view code,.note.thm-gruvbox .md-view code{color:var(--code);background:var(--code-bg)}
+.note.thm-onedark .md-view pre,.note.thm-gruvbox .md-view pre{background:var(--pre-bg);border-color:var(--tbl-bd)}
+.note.thm-onedark .md-view pre code,.note.thm-gruvbox .md-view pre code{color:var(--pre-fg);background:none}
+.note.thm-onedark .md-view table,.note.thm-gruvbox .md-view table{color:inherit}
+.note.thm-onedark .md-view th,.note.thm-onedark .md-view td,.note.thm-gruvbox .md-view th,.note.thm-gruvbox .md-view td{border-color:var(--tbl-bd)}
+.note.thm-onedark .md-view th,.note.thm-gruvbox .md-view th{background:var(--th-bg)}
+/* 主题卡的把手条/图钉/主题按钮自动跟 currentColor（既有规则即插即用），标题条文字可读性靠继承 */
+
+.tprevail{position:fixed;inset:0;z-index:1100010}
+.tp .tp-label{font-size:11px;font-weight:700;color:#8a94a1;letter-spacing:.5px;margin:8px 0 4px}
+.tp .mi.on{color:var(--accent);font-weight:700}
+.tp-chip{margin-left:auto;border:1px solid;border-radius:5px;font-size:10px;font-weight:800;padding:1px 5px;min-width:22px;text-align:center}
+.tp-hint{font-weight:400;opacity:.7}
+.tp-cur{margin-top:8px;border-top:1px solid var(--panel-bd);padding-top:6px;font-size:11px;color:#8a94a1}
+
+
+/* ============ v15：轻量标签 ============ */
+.shelf{z-index:900000}
+.shelf-meta{flex:1 1 auto;min-width:0;display:flex;align-items:center;justify-content:center;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 0}
+.shelf-meta::-webkit-scrollbar{display:none}
+.sm-stats{font-size:11px;color:var(--text-3);white-space:nowrap;flex:none}
+.sm-dot{color:var(--text-3);flex:none}
+.tag-pill{flex:none;border:1px solid var(--panel-bd);background:transparent;border-radius:99px;padding:2px 9px;font-size:11px;line-height:1.5;color:var(--text-2);cursor:pointer;white-space:nowrap;transition:background .12s,border-color .12s}
+.tag-pill b{font-weight:700;margin-left:3px;color:var(--text-3)}
+.tag-pill:hover{border-color:var(--accent);color:var(--accent)}
+.tag-pill.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.tag-pill.on b{color:rgba(255,255,255,.8)}
+.tag-pill.tag-clear{color:var(--text-3)}
+.md-tag{display:inline-block;background:color-mix(in oklab,var(--accent) 12%,transparent);color:var(--accent);border-radius:5px;padding:0 5px;font-size:.86em;margin:0 1px;white-space:nowrap}
+html[data-theme="dark"] .tag-pill.on{color:#0b1220}
+.note.thm-onedark .md-tag{background:rgba(86,182,194,.14);color:#56b6c2}
+.note.thm-gruvbox .md-tag{background:rgba(69,133,136,.12);color:#458588}
+@media (max-width:640px){.sm-stats{display:none}.shelf-bar .s-toggle span{display:none}}
+
+
+/* v16：标题栏导出按钮与格式小菜单（grip-dots 已移除，拖拽仍可用整条标题栏） */
+.note-save-btn{width:22px;height:22px;border:0;border-radius:6px;background:transparent;color:inherit;opacity:.42;display:grid;place-items:center;cursor:pointer;flex:none}
+.note-save-btn:hover{opacity:.85;background:color-mix(in oklab,var(--ink,#000) 10%,transparent)}
+.note-save-btn:active{transform:scale(.92)}
+.exp-menu{min-width:190px}
+.exp-menu .mi{display:block;width:100%;text-align:left}
+
+
+/* v16.1：新建按钮圆形图标化 */
+.btn-new-round{width:38px;height:38px;padding:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
+@media (max-width:760px){.btn-new-round{width:34px;height:34px}}
+
+/* ============ 菜单 / 弹窗 / Toast / 空状态 ============ */
+#menu-layer{position:fixed;inset:0;z-index:1100000;display:none}
+#menu-layer.open{display:block}
+.menu{
+  position:fixed;width:284px;max-width:calc(100vw - 20px);
+  background:var(--panel);border:1px solid var(--panel-bd);border-radius:var(--r-md);
+  box-shadow:var(--shadow-l);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  padding:12px;display:grid;gap:11px;font-size:13px;
+  animation:menu-in .14s ease-out;
+}
+@keyframes menu-in{from{opacity:0;transform:translateY(-5px) scale(.98)}}
+.menu-label{font-size:11px;font-weight:700;color:var(--text-3);margin-bottom:7px;letter-spacing:.5px}
+.swatches{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.sw{width:26px;height:26px;border-radius:9px;background:var(--c,#fff);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);transition:transform .12s}
+.sw:hover{transform:scale(1.12)}
+.sw.on{box-shadow:inset 0 0 0 2px var(--accent),0 0 0 2px color-mix(in oklab,var(--accent) 35%,transparent)}
+.sw-custom{position:relative;width:26px;height:26px;border-radius:9px;overflow:hidden;
+  background:conic-gradient(#f66,#fc6,#ff6,#6f9,#6cf,#96f,#f6c,#f66);box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.sw-custom input{position:absolute;inset:-8px;width:200%;height:200%;border:0;padding:0;background:none;cursor:pointer;opacity:0}
+.sw-custom span{position:absolute;inset:0;display:grid;place-items:center;font-size:13px;pointer-events:none}
+
+.menu input[type="datetime-local"]{
+  width:100%;height:34px;border:1px solid var(--panel-bd);border-radius:var(--r-sm);
+  background:color-mix(in oklab,var(--text) 4%,transparent);
+  padding:0 8px;font-size:12.5px;color:var(--text);outline:none;
+}
+.menu input[type="datetime-local"]:focus{border-color:var(--accent)}
+.quick-row{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+.chip{font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:99px;
+  background:color-mix(in oklab,var(--accent) 12%,transparent);color:var(--accent)}
+.chip:hover{background:color-mix(in oklab,var(--accent) 20%,transparent)}
+.menu-acts{display:grid;gap:2px}
+.mi{display:flex;align-items:center;gap:9px;width:100%;padding:8px 9px;
+  border-radius:var(--r-sm);text-align:left;font-weight:500}
+.mi:hover{background:color-mix(in oklab,var(--text) 7%,transparent)}
+.mi .ico{width:15px;height:15px;opacity:.75}
+.mi.danger{color:var(--danger)}
+.mi.on{color:var(--accent)}
+
+.empty{position:absolute;inset:0;display:grid;place-items:center;z-index:2}
+.empty[hidden]{display:none}
+.empty-card{
+  text-align:center;max-width:400px;padding:34px 38px;
+  background:var(--panel);border:1.5px dashed var(--panel-bd);border-radius:var(--r-xl);
+}
+.empty-emoji{font-size:38px;margin-bottom:8px}
+.empty-card h2{margin:0 0 8px;font-size:18px}
+.empty-card p{margin:0 0 18px;font-size:13px;line-height:1.7;color:var(--text-2)}
+.empty-card .btn{margin:0 auto}
+.noresult{
+  position:absolute;top:45%;left:50%;transform:translate(-50%,-50%);
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;
+  font-size:13px;color:var(--text-3);background:var(--panel);
+  border:1px solid var(--panel-bd);border-radius:99px;padding:8px 18px;z-index:2;
+}
+
+#toasts{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:1200000;
+  display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+.toast{
+  pointer-events:auto;display:flex;align-items:center;gap:10px;
+  max-width:min(92vw,520px);padding:10px 14px;border-radius:var(--r-xl);
+  background:var(--text);color:var(--bg);font-size:13px;font-weight:500;
+  box-shadow:var(--shadow-l);animation:toast-in .22s ease-out;
+}
+.toast.warn{background:var(--danger);color:#fff}
+@keyframes toast-in{from{opacity:0;transform:translateY(8px)}}
+.toast.out{opacity:0;transform:translateY(6px);transition:all .25s}
+.toast button{font-weight:700;color:inherit;text-decoration:underline;padding:2px}
+.toast .t-ico{flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:99px;
+  background:color-mix(in oklab,currentColor 18%,transparent);font-size:12px}
+.toast .t-msg{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.modal-backdrop{position:fixed;inset:0;z-index:1300000;display:grid;place-items:center;
+  background:rgba(10,12,16,.5);backdrop-filter:blur(3px)}
+.modal-backdrop[hidden]{display:none}
+.modal{width:min(92vw,440px);background:var(--panel);border:1px solid var(--panel-bd);
+  border-radius:var(--r-xl);box-shadow:var(--shadow-l);padding:22px 24px;font-size:13px}
+.modal h3{margin:0 0 14px;font-size:16px}
+.help-list{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+.help-list li{display:flex;align-items:baseline;gap:8px}
+.help-list li span{flex:1;min-width:0}
+.help-tips{margin-top:14px;padding-top:14px;border-top:1px solid var(--panel-bd);
+  color:var(--text-2);line-height:1.6}
+.modal .btn{margin-top:18px;float:right}
+.modal::after{content:"";display:block;clear:both}
+</style>
+</head>
+<body>
+
+<!-- ================= 工具栏 ================= -->
+<header class="bar" role="banner">
+  <div class="bar-brand">
+    <span class="brand-dot" aria-hidden="true"></span>
+    <div class="brand-txt">
+      <strong>便签台 <span class="brand-ver">v16.3</span></strong>
+      <span class="brand-sub">随手记 · 到期提醒</span>
+    </div>
+  </div>
+
+  <div class="bar-search">
+    <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 0 1 13 0z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <input id="search" type="search" placeholder="搜索便签…（⌘K）" autocomplete="off" spellcheck="false" aria-label="搜索便签">
+    <span id="search-count" class="search-count" hidden></span>
+    <button id="search-clear" class="s-clear" hidden aria-label="清除搜索" title="清除搜索（Esc）">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+
+  <div class="bar-actions">
+    <button id="btn-arrange-top" class="btn btn-ghost" title="一键整理：顶部从左到右，放不下自动换行" aria-label="顶部从左到右排列">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="2.5" y="6" width="6.5" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="11" y="6" width="6.5" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M20.5 9.5l2.2 2.5-2.2 2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button id="btn-arrange-left" class="btn btn-ghost" title="一键整理：左侧从下向上，顶到尽头开新列" aria-label="左侧从下向上排列">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="6" y="12.5" width="11" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="6" y="4.5" width="11" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 6.5L11.5 4l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 -1.5)"/></svg>
+    </button>
+    <button id="btn-foldall" class="btn btn-ghost" aria-label="全部收起"></button>
+    <button id="btn-todo" class="btn btn-ghost" aria-label="只看待办" title="只看待办">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M4 6.5l3 3L13 3M4 17.5l3 3 6-7M14.5 19H21M14.5 6.5H21M14.5 12.5H21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button id="btn-import" class="btn btn-ghost" title="从 .json 导入便签（合并）" aria-label="导入便签">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 3v11m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button id="btn-export" class="btn btn-ghost" title="导出全部便签为 .json" aria-label="导出便签">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 15V4m0 0L8 8m4-4l4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="export-dot" hidden aria-hidden="true"></span>
+    </button>
+    <input id="file-import" type="file" accept=".json,application/json" hidden>
+    <button id="btn-new" class="btn btn-primary btn-new-round" title="新建便签（⌘/Ctrl + N）" aria-label="新建便签">
+      <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+    </button>
+    <button id="btn-theme" class="btn btn-ghost" title="切换明暗主题" aria-label="切换明暗主题">
+      <svg viewBox="0 0 24 24" class="ico ico-sun" aria-hidden="true"><path d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <svg viewBox="0 0 24 24" class="ico ico-moon" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+    </button>
+    <button id="btn-help" class="btn btn-ghost" title="快捷键（?）" aria-label="帮助">?</button>
+  </div>
+</header>
+
+<!-- 状态行：便签数 / 提醒数 -->
+<div class="statusline" id="statusline" aria-live="polite"></div>
+
+<!-- ================= 画布 ================= -->
+<main class="canvas" id="canvas" role="application" aria-label="便签画布">
+  <div class="empty" id="empty" hidden>
+    <div class="empty-card">
+      <div class="empty-emoji" aria-hidden="true">🗒️</div>
+      <h2>还没有便签</h2>
+      <p>点右上角「新建便签」，或按 <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>N</kbd>。<br>所有内容只保存在这台设备的浏览器里。</p>
+      <button class="btn btn-primary" id="btn-new-empty"><span>新建第一张便签</span></button>
+    </div>
+  </div>
+  <svg class="edge-layer" id="edge-layer" aria-hidden="true"></svg>
+  <div class="noresult" id="noresult" hidden><span>没有匹配的便签</span><button class="chip" data-add="[]">[] 待办</button><button class="chip" data-add="!due">!due 过期</button><button class="chip" data-add="c:">c:颜色</button></div>
+  <div class="shelf" id="shelf" hidden></div>
+</main>
+
+<!-- ================= 覆盖层 ================= -->
+<div id="menu-layer"></div>
+<div id="toasts" aria-live="assertive"></div>
+
+<div class="modal-backdrop" id="help-modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <h3 id="help-title">快捷键 &amp; 小贴士</h3>
+    <ul class="help-list">
+      <li><kbd>⌘/Ctrl</kbd>+<kbd>N</kbd><span>新建便签</span></li>
+      <li><kbd>⌘/Ctrl</kbd>+<kbd>K</kbd><span>聚焦搜索</span></li>
+      <li><kbd>Del</kbd><span>删除选中的便签（可在 Toast 中撤销）</span></li>
+      <li><kbd>Esc</kbd><span>取消编辑 / 关闭菜单 / 取消选中</span></li>
+      <li><kbd>?</kbd><span>打开本窗口</span></li>
+    </ul>
+    <ul class="help-list help-tips">
+      <li><span>拖把手移动，拖右下角改大小；<b>最左 ◀ 箭头</b>收起便签——只留一行标题（内容第一行），再点展开。</span></li>
+      <li><span>正文是 <b>Markdown</b>：双击进入编辑，失焦自动渲染。支持 # 标题、**粗体**、*斜体*、~~删除~~、列表、- [ ] 任务清单（可点勾）、&gt; 引用、\`代码\`、链接。</span></li>
+      <li><span><b>表格</b>：<code>| 名称 | 价格 |</code> + <code>|:--|--:|</code> 对齐行，单元格支持行内语法，可转义竖线。<b>图片</b>：<code>![说明](https://…/a.png)</code> —— 仅 http/s，自动限宽。</span></li>
+      <li><span><b>⋯ 菜单</b>：换颜色 / 设提醒 / 置顶 / 复制 / 删除。到点提醒 = 系统通知 + 提示音 + 脉冲；未授权自动降级为页内提醒。</span></li>
+      <li><span>工具栏 ↑/↓ <b>导出/导入 .json</b>（导入先预览影响再确认）；10 张以上久未备份，导出键亮红点。</span></li>
+      <li><span><b>标签</b>：正文写 <code>#工作</code>（#后直接跟文字，中英文皆可）即自动打标签；底栏点标签筛选，可多选（同时包含）；搜索词也会命中标签；<code>`#码内`</code> 与代码块里的 # 不算标签。</span></li>
+      <li><span><b>搜索符号</b>：<code>[]</code> 含未完成任务 · <code>!due</code> 过期未读 · <code>c:色名</code> 按颜色，可与文字叠加；<b>☑ 按钮</b>只看待办。30 天未动的卡自动沉淀淡出。</span></li>
+      <li><span><b>关联</b>：⋯ 菜单「关联到…」再点另一张，两点出现连线；点线即断开。</span></li>
+        <li><span><b>归档</b>：⋯「归档这张」或墙底架子「沉淀 N 张 → 入架」收走陈旧便签；点架子展开回看、单击回位；搜索命中或提醒到点<b>自动回位</b>，批量操作不碰入架卡。</span></li>
+    </ul>
+    <button class="btn btn-primary" id="btn-help-close">知道了</button>
+  </div>
+</div>
+
+<script>var StickyCore = (() => {
+  var __defProp = Object.defineProperty;
+  var __defProps = Object.defineProperties;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __getOwnPropSymbols = Object.getOwnPropertySymbols;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __propIsEnum = Object.prototype.propertyIsEnumerable;
+  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __spreadValues = (a, b) => {
+    for (var prop in b || (b = {}))
+      if (__hasOwnProp.call(b, prop))
+        __defNormalProp(a, prop, b[prop]);
+    if (__getOwnPropSymbols)
+      for (var prop of __getOwnPropSymbols(b)) {
+        if (__propIsEnum.call(b, prop))
+          __defNormalProp(a, prop, b[prop]);
+      }
+    return a;
+  };
+  var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+  var __copyProps = (to, from, except, desc) => {
+    if (from && typeof from === "object" || typeof from === "function") {
+      for (let key of __getOwnPropNames(from))
+        if (!__hasOwnProp.call(to, key) && key !== except)
+          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    }
+    return to;
+  };
+  var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+  var s_exports = {};
+  __export(s_exports, {
+    APP_VERSION: () => APP_VERSION2,
+    ARR_GAP: () => ARR_GAP2,
+    ARR_M: () => ARR_M,
+    ARR_TOP_GAP: () => ARR_TOP_GAP2,
+    BAR_H: () => BAR_H2,
+    COLLAPSED_H: () => COLLAPSED_H2,
+    DEF_H: () => DEF_H2,
+    DEF_W: () => DEF_W2,
+    LEGACY_STORE_KEYS: () => LEGACY_STORE_KEYS2,
+    MIN_H: () => MIN_H2,
+    MIN_W: () => MIN_W2,
+    PALETTE: () => PALETTE2,
+    SCHEMA: () => SCHEMA2,
+    STALE_DAYS: () => STALE_DAYS2,
+    STORE_KEY: () => STORE_KEY2,
+    aggregateTags: () => aggregateTags2,
+    applyFold: () => applyFold2,
+    archiveNote: () => archiveNote2,
+    archiveStale: () => archiveStale2,
+    clamp: () => clamp2,
+    dayTag: () => dayTag2,
+    escHTML: () => escHTML2,
+    extractTags: () => extractTags2,
+    fitNote: () => fitNote2,
+    foldAll: () => foldAll2,
+    fromInput: () => fromInput2,
+    inkFor: () => inkFor2,
+    isArchived: () => isArchived2,
+    isHex: () => isHex2,
+    isStale: () => isStale2,
+    isTodo: () => isTodo2,
+    isoLocal: () => isoLocal2,
+    layoutCount: () => layoutCount2,
+    layoutLeftCol: () => layoutLeftCol2,
+    layoutOrder: () => layoutOrder2,
+    layoutTopRow: () => layoutTopRow2,
+    matchTags: () => matchTags2,
+    mdInline: () => mdInline2,
+    mergeEdges: () => mergeEdges2,
+    newNote: () => newNote2,
+    normOverride: () => normOverride2,
+    normSyntax: () => normSyntax2,
+    normalizeEdges: () => normalizeEdges2,
+    normalizeNoteList: () => normalizeNoteList2,
+    noteDate: () => noteDate2,
+    noteFileName: () => noteFileName2,
+    pad2: () => pad22,
+    parseSearch: () => parseSearch2,
+    plainTitle: () => plainTitle2,
+    remindBadge: () => remindBadge2,
+    renderMD: () => renderMD2,
+    resolveTheme: () => resolveTheme2,
+    restoreAll: () => restoreAll2,
+    searchMatch: () => searchMatch2,
+    toInput: () => toInput2,
+    toggleTaskLine: () => toggleTaskLine2,
+    tokenCount: () => tokenCount2,
+    ui: () => ui2,
+    uid: () => uid2,
+    unfoldAll: () => unfoldAll2,
+    viewport: () => viewport2,
+    wakeArchived: () => wakeArchived2,
+    wakeDue: () => wakeDue2
+  });
+  var SCHEMA2 = 4;
+  var APP_VERSION2 = "v16.3";
+  var STORE_KEY2 = "sticky-" + ["b", "o", "a", "r", "d"].join("") + ":v1";
+  var LEGACY_STORE_KEYS2 = ["sticky-\u2026e:v1"];
+  var PALETTE2 = [
+    { name: "\u67E0\u6AAC\u9EC4", hex: "#ffe9a8" },
+    { name: "\u871C\u6843\u6A59", hex: "#ffd4b8" },
+    { name: "\u73CA\u745A\u7C89", hex: "#ffc2c4" },
+    { name: "\u85B0\u8863\u8349\u7D2B", hex: "#e0d0ff" },
+    { name: "\u8584\u8377\u7EFF", hex: "#c2ecd6" },
+    { name: "\u5929\u7A7A\u84DD", hex: "#bcdfff" },
+    { name: "\u65B0\u8349\u7EFF", hex: "#d9efa6" },
+    { name: "\u70DF\u7070\u767D", hex: "#e9ebee" }
+  ];
+  var MIN_W2 = 190;
+  var MIN_H2 = 150;
+  var DEF_W2 = 252;
+  var DEF_H2 = 212;
+  var BAR_H2 = 60;
+  var clamp2 = (v, a, b) => Math.min(Math.max(v, a), b);
+  var uid2 = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  var pad22 = (n) => String(n).padStart(2, "0");
+  var isHex2 = (h) => /^#[0-9a-f]{6}$/i.test(h || "");
+  var ui2 = { top: 0 };
+  var viewport2 = {
+    get w() {
+      return innerWidth;
+    },
+    get h() {
+      return innerHeight;
+    }
+  };
+  var COLLAPSED_H2 = 36;
+  var STALE_DAYS2 = 30;
+  function fitNote2(n, x = n.x, y = n.y) {
+    const minH = n.collapsed ? COLLAPSED_H2 : MIN_H2;
+    const w = clamp2(n.w, MIN_W2, Math.max(MIN_W2, viewport2.w - 12));
+    const h = clamp2(n.h, minH, Math.max(minH, viewport2.h - BAR_H2 - 12));
+    return __spreadProps(__spreadValues({}, n), {
+      w,
+      h,
+      x: clamp2(Math.round(x), 4, Math.max(4, viewport2.w - w - 4)),
+      y: clamp2(Math.round(y), BAR_H2 + 1 + ui2.top, Math.max(BAR_H2 + 1 + ui2.top, viewport2.h - h - 4))
+      // 贴顶栏下沿 1px，含移动端补偿
+    });
+  }
+  function newNote2(index, z, over) {
+    const base = {
+      id: uid2(),
+      text: "",
+      x: 0,
+      y: 0,
+      w: DEF_W2,
+      h: DEF_H2,
+      color: PALETTE2[index % 5].hex,
+      remindAt: null,
+      notified: false,
+      pinned: false,
+      collapsed: false,
+      hExp: DEF_H2,
+      rot: 0,
+      // v5 起零倾斜：滚动条与文字像素对齐，杜绝旋转锯齿
+      z,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    return fitNote2(__spreadValues(__spreadValues({}, base), over));
+  }
+  function toInput2(dt) {
+    if (!dt) return "";
+    const d = new Date(dt);
+    return `${d.getFullYear()}-${pad22(d.getMonth() + 1)}-${pad22(d.getDate())}T${pad22(d.getHours())}:${pad22(d.getMinutes())}`;
+  }
+  var fromInput2 = (v) => {
+    const t = Date.parse(v);
+    return Number.isNaN(t) ? null : t;
+  };
+  function dayTag2(ts) {
+    const d = new Date(ts), n = /* @__PURE__ */ new Date();
+    const same = (a, b) => a.toDateString() === b.toDateString();
+    const hm = `${pad22(d.getHours())}:${pad22(d.getMinutes())}`;
+    if (same(d, n)) return `\u4ECA\u5929 ${hm}`;
+    if (same(d, new Date(n.getTime() + 864e5))) return `\u660E\u5929 ${hm}`;
+    if (same(d, new Date(n.getTime() - 864e5))) return `\u6628\u5929 ${hm}`;
+    return `${d.getMonth() + 1}\u6708${d.getDate()}\u65E5 ${hm}`;
+  }
+  function remindBadge2(ts, now) {
+    const diff = ts - now;
+    if (diff <= 0) return "\u5DF2\u8FC7\u65F6 \xB7 " + dayTag2(ts);
+    if (diff < 6e4) return "\u5373\u5C06\u5230\u70B9";
+    if (diff < 36e5) return `${Math.ceil(diff / 6e4)} \u5206\u949F\u540E`;
+    return dayTag2(ts);
+  }
+  function noteDate2(ts) {
+    const d = new Date(ts);
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  }
+  function inkFor2(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+    if (!m) return "rgb(30,35,42)";
+    const v = parseInt(m[1], 16);
+    const chan = [16, 8, 0].map((s) => (v >> s & 255) / 255).map((c) => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    const L = chan[0] * 0.2126 + chan[1] * 0.7152 + chan[2] * 0.0722;
+    return L > 0.42 ? "rgb(32,37,45)" : "rgb(248,250,252)";
+  }
+  function normalizeNoteList2(list) {
+    const num = (v, d) => typeof v === "number" && Number.isFinite(v) ? v : d;
+    return list.filter((n) => n && typeof n === "object" && typeof n.id === "string").map((m0) => {
+      var _a;
+      const m = typeof m0 === "object" && !(m0 instanceof Array) ? m0 : {};
+      return fitNote2({
+        id: m.id,
+        text: String((_a = m.text) != null ? _a : ""),
+        x: num(m.x, 60),
+        y: num(m.y, 100),
+        w: num(m.w, DEF_W2),
+        h: num(m.h, DEF_H2),
+        color: isHex2(m.color) ? m.color : PALETTE2[0].hex,
+        remindAt: num(m.remindAt, 0) || null,
+        notified: Boolean(m.notified),
+        pinned: Boolean(m.pinned),
+        collapsed: Boolean(m.collapsed),
+        archived: num(m.archived, 0) || null,
+        overrideTheme: normOverride2(m.overrideTheme),
+        // 旧存档无字段=未归档
+        hExp: num(m.hExp, num(m.h, DEF_H2)),
+        rot: 0,
+        // v1/v2 存档中的倾斜角度在此统一归零（v5）
+        z: num(m.z, 1),
+        createdAt: num(m.createdAt, Date.now()),
+        updatedAt: num(m.updatedAt, Date.now())
+      });
+    });
+  }
+  var HTML_ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+  function escHTML2(s) {
+    return s.replace(/[&<>"']/g, (c) => {
+      var _a;
+      return (_a = HTML_ESCAPES[c]) != null ? _a : c;
+    });
+  }
+  var SAFE_HREF = /^(https?:|mailto:)/i;
+  function mdEmphasis(s) {
+    return s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_all, alt, url) => {
+      const un = url.replace(/&amp;/g, "&");
+      return SAFE_HREF.test(un) ? `<img src="${un}" alt="${alt}" loading="lazy">` : _all;
+    }).replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_all, txt, url) => {
+      const un = url.replace(/&amp;/g, "&");
+      return SAFE_HREF.test(un) ? `<a href="${un}" target="_blank" rel="noopener noreferrer">${txt}</a>` : _all;
+    }).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>").replace(/~~([^~]+)~~/g, "<del>$1</del>");
+  }
+  function mdInline2(s) {
+    let out = "", last = 0, m;
+    const re = /`([^`]+)`/g;
+    while (m = re.exec(s)) {
+      out += mdTagify(mdEmphasis(escHTML2(s.slice(last, m.index)))) + "<code>" + escHTML2(m[1]) + "</code>";
+      last = m.index + m[0].length;
+    }
+    return out + mdTagify(mdEmphasis(escHTML2(s.slice(last))));
+  }
+  function mdTagify(html) {
+    return html.replace(TAG_EXTRACT, (_all, tag) => `<span class="md-tag">#${tag}</span>`);
+  }
+  function splitRow(line) {
+    const t = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+    return t.split(new RegExp("(?<!\\\\)\\|"));
+  }
+  var TBL_DELIM = /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/;
+  function alignOf(cell) {
+    const t = cell.trim();
+    if (t.startsWith(":") && t.endsWith(":")) return "center";
+    if (t.endsWith(":")) return "right";
+    if (t.startsWith(":")) return "left";
+    return "";
+  }
+  var thStyle = (a) => a ? ` style="text-align:${a}"` : "";
+  var cellMD = (c) => mdInline2(c.trim().replace(/\\\|/g, "|"));
+  function renderMD2(src) {
+    var _a;
+    const lines = String(src || "").split("\n");
+    const html = [];
+    let para = [];
+    let list = null;
+    let fence = null;
+    const flushP = () => {
+      if (para.length) {
+        html.push("<p>" + para.join("<br>") + "</p>");
+        para = [];
+      }
+    };
+    const flushL = () => {
+      if (list) {
+        html.push(`<${list.tag}>` + list.items.join("") + `</${list.tag}>`);
+        list = null;
+      }
+    };
+    const pushList = (tag, item) => {
+      flushP();
+      if (!list || list.tag !== tag) {
+        flushL();
+        list = { tag, items: [] };
+      }
+      list.items.push(item);
+    };
+    for (let i = 0; i < lines.length; i++) {
+      const ln = lines[i];
+      if (fence !== null) {
+        if (/^\s*```\s*$/.test(ln)) {
+          html.push("<pre><code>" + fence.join("\n") + "</code></pre>");
+          fence = null;
+        } else fence.push(escHTML2(ln));
+        continue;
+      }
+      if (/^\s*```\s*$/.test(ln)) {
+        flushP();
+        flushL();
+        fence = [];
+        continue;
+      }
+      let m;
+      if (m = /^(#{1,3})\s+(.*)$/.exec(ln)) {
+        flushP();
+        flushL();
+        const h = m[1].length;
+        html.push(`<h${h}>${mdInline2(m[2])}</h${h}>`);
+        continue;
+      }
+      if (/^\s*(---+|\*\*\*+)\s*$/.test(ln)) {
+        flushP();
+        flushL();
+        html.push("<hr>");
+        continue;
+      }
+      if (m = /^>\s?(.*)$/.exec(ln)) {
+        flushP();
+        flushL();
+        html.push("<blockquote>" + mdInline2(m[1]) + "</blockquote>");
+        continue;
+      }
+      if (/^\s*\|/.test(ln) && TBL_DELIM.test((_a = lines[i + 1]) != null ? _a : "")) {
+        const aligns = splitRow(lines[i + 1]).map(alignOf);
+        flushP();
+        flushL();
+        const th = splitRow(ln).map((c, ci) => {
+          var _a2;
+          return `<th${thStyle((_a2 = aligns[ci]) != null ? _a2 : "")}>${cellMD(c)}</th>`;
+        });
+        const rows = [];
+        i += 2;
+        for (; i < lines.length && /^\s*\|/.test(lines[i]); i++) {
+          rows.push("<tr>" + splitRow(lines[i]).map((c, ci) => {
+            var _a2;
+            return `<td${thStyle((_a2 = aligns[ci]) != null ? _a2 : "")}>${cellMD(c)}</td>`;
+          }).join("") + "</tr>");
+        }
+        html.push(`<table><thead><tr>${th.join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`);
+        i--;
+        continue;
+      }
+      if (m = /^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/.exec(ln)) {
+        const done = m[1] !== " ";
+        pushList("ul", `<li class="task${done ? " done" : ""}"><input type="checkbox" data-l="${i}"${done ? " checked" : ""} aria-label="\u5207\u6362\u5B8C\u6210"><span>${mdInline2(m[2])}</span></li>`);
+        continue;
+      }
+      if (m = /^\s*[-*]\s+(.*)$/.exec(ln)) {
+        pushList("ul", "<li>" + mdInline2(m[1]) + "</li>");
+        continue;
+      }
+      if (m = /^\s*(\d+)[.)]\s+(.*)$/.exec(ln)) {
+        pushList("ol", "<li>" + mdInline2(m[2]) + "</li>");
+        continue;
+      }
+      if (!ln.trim()) {
+        flushP();
+        flushL();
+        continue;
+      }
+      flushL();
+      para.push(mdInline2(ln));
+    }
+    if (fence !== null) html.push("<pre><code>" + fence.join("\n") + "</code></pre>");
+    flushP();
+    flushL();
+    return html.join("");
+  }
+  function plainTitle2(src) {
+    const ln = String(src || "").split("\n").find((l) => l.trim()) || "";
+    return ln.trim().replace(/^#{1,3}\s+/, "").replace(/^\s*[-*]\s+\[( |x|X)\]\s+/, "").replace(/^\s*[-*]\s+/, "").replace(/^\s*\d+[.)]\s+/, "").replace(/^>\s?/, "").replace(/[*_~`]/g, "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").trim();
+  }
+  function isoLocal2(d) {
+    const off = -d.getTimezoneOffset(), sign = off >= 0 ? "+" : "-";
+    return `${d.getFullYear()}-${pad22(d.getMonth() + 1)}-${pad22(d.getDate())}T${pad22(d.getHours())}:${pad22(d.getMinutes())}:${pad22(d.getSeconds())}${sign}${pad22(Math.floor(Math.abs(off) / 60))}:${pad22(Math.abs(off) % 60)}`;
+  }
+  function applyFold2(n) {
+    return n.collapsed ? __spreadProps(__spreadValues({}, n), { collapsed: false, h: clamp2(n.hExp || DEF_H2, MIN_H2, Math.max(MIN_H2, viewport2.h - n.y - 8)) }) : __spreadProps(__spreadValues({}, n), { collapsed: true, hExp: n.h > COLLAPSED_H2 ? n.h : n.hExp, h: COLLAPSED_H2 });
+  }
+  function toggleTaskLine2(text, idx) {
+    var _a;
+    const ls = text.split("\n");
+    if (!/^\s*[-*]\s+\[( |x|X)\]/.test((_a = ls[idx]) != null ? _a : "")) return text;
+    ls[idx] = ls[idx].replace(/^(\s*[-*]\s+\[)( |x|X)(\])/, (_m, a, c, b) => a + (c === " " ? "x" : " ") + b);
+    return ls.join("\n");
+  }
+  function foldAll2(notes) {
+    return notes.map((n) => n.collapsed || n.pinned || n.archived ? n : fitNote2(__spreadProps(__spreadValues({}, n), { collapsed: true, hExp: Math.max(n.h, COLLAPSED_H2), h: COLLAPSED_H2 })));
+  }
+  function unfoldAll2(notes) {
+    return notes.map((n) => !n.collapsed || n.pinned || n.archived ? n : fitNote2(__spreadProps(__spreadValues({}, n), {
+      collapsed: false,
+      h: clamp2(n.hExp && n.hExp >= MIN_H2 ? n.hExp : DEF_H2, MIN_H2, Math.max(MIN_H2, viewport2.h - n.y - 8))
+    })));
+  }
+  var ARR_GAP2 = 18;
+  var ARR_M = 12;
+  var ARR_TOP_GAP2 = 3;
+  function layoutTopRow2(notesIn) {
+    let x = ARR_M, rowTop = BAR_H2 + ARR_TOP_GAP2 + ui2.top, rowH = 0;
+    const placed = /* @__PURE__ */ new Map();
+    layoutOrder2(notesIn).forEach((n0) => {
+      if (n0.archived) return;
+      if (n0.pinned) {
+        placed.set(n0.id, n0);
+        return;
+      }
+      const n = __spreadValues({}, n0);
+      if (x + n.w > viewport2.w - ARR_M - 4 && x > ARR_M) {
+        x = ARR_M;
+        rowTop += rowH + ARR_GAP2;
+        rowH = 0;
+      }
+      const fp = fitNote2(n, x, rowTop);
+      x = fp.x + fp.w + ARR_GAP2;
+      rowH = Math.max(rowH, fp.h);
+      placed.set(n0.id, fp);
+    });
+    return notesIn.map((n0) => {
+      var _a;
+      return (_a = placed.get(n0.id)) != null ? _a : n0;
+    });
+  }
+  function layoutLeftCol2(notesIn) {
+    let x = ARR_M;
+    let bottomY = viewport2.h - ARR_M - COLLAPSED_H2;
+    let colW = 0, placedCount = 0;
+    const placed = /* @__PURE__ */ new Map();
+    layoutOrder2(notesIn).forEach((n0) => {
+      if (n0.archived) return;
+      if (n0.pinned) {
+        placed.set(n0.id, n0);
+        return;
+      }
+      const n = __spreadValues({}, n0);
+      if (bottomY - n.h < BAR_H2 + 16 + ui2.top && placedCount > 0) {
+        x = x + colW + ARR_GAP2;
+        colW = 0;
+        bottomY = viewport2.h - ARR_M - COLLAPSED_H2;
+        placedCount = 0;
+      }
+      const fp = fitNote2(n, x, bottomY - n.h);
+      bottomY = fp.y - ARR_GAP2;
+      colW = Math.max(colW, fp.w);
+      placedCount++;
+      placed.set(n0.id, fp);
+    });
+    return notesIn.map((n0) => {
+      var _a;
+      return (_a = placed.get(n0.id)) != null ? _a : n0;
+    });
+  }
+  var isArchived2 = (n) => !!n.archived;
+  function isStale2(n, now = Date.now()) {
+    if (n.remindAt && !n.notified) return false;
+    return now - (n.updatedAt || n.createdAt) > STALE_DAYS2 * 864e5;
+  }
+  function isTodo2(n) {
+    if (n.remindAt && !n.notified) return true;
+    return /^\s*[-*]\s+\[ \]/m.test(n.text || "");
+  }
+  function parseSearch2(term) {
+    const out = { text: "", todo: false, due: false, color: null };
+    const rest = [];
+    for (const tk of term.trim().split(/\s+/)) {
+      if (!tk) continue;
+      if (tk === "[]" || tk === "[ ]") {
+        out.todo = true;
+        continue;
+      }
+      if (tk === "!due") {
+        out.due = true;
+        continue;
+      }
+      const cm = /^(?:c|色):(.+)$/i.exec(tk);
+      if (cm) {
+        out.color = cm[1].toLowerCase();
+        continue;
+      }
+      rest.push(tk);
+    }
+    out.text = rest.join(" ");
+    return out;
+  }
+  function tokenCount2(term) {
+    return /(^|\s)(\[\s?\]|!due|[cC]:|色:)/.test(term);
+  }
+  function searchMatch2(n, q, now = Date.now()) {
+    if (q.text) {
+      const t = q.text.toLowerCase();
+      const hay = (n.text || "").toLowerCase();
+      const tagl = extractTags2(n.text || "").map((x) => "#" + x.toLowerCase()).join(" ");
+      if (!hay.includes(t) && !tagl.includes(t.startsWith("#") ? t : "#" + t)) return false;
+    }
+    if (q.todo && !isTodo2(n)) return false;
+    if (q.due && !(n.remindAt && !n.notified && n.remindAt <= now)) return false;
+    if (q.color) {
+      const pal = PALETTE2.find((x) => x.name.toLowerCase().includes(q.color) || x.hex.toLowerCase().includes(q.color));
+      if (!pal || n.color.toLowerCase() !== pal.hex.toLowerCase()) return false;
+    }
+    return true;
+  }
+  function normalizeEdges2(list, has) {
+    if (!Array.isArray(list)) return [];
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const e of list) {
+      if (!Array.isArray(e) || e.length !== 2 || typeof e[0] !== "string" || typeof e[1] !== "string") continue;
+      if (!has(e[0]) || !has(e[1]) || e[0] === e[1]) continue;
+      const key = e[0] < e[1] ? e[0] + "~" + e[1] : e[1] + "~" + e[0];
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(e[0] < e[1] ? [e[0], e[1]] : [e[1], e[0]]);
+    }
+    return out;
+  }
+  function mergeEdges2(a, b) {
+    const map = /* @__PURE__ */ new Map();
+    [...a, ...b].forEach((e) => map.set(e[0] < e[1] ? e[0] + "~" + e[1] : e[1] + "~" + e[0], e[0] < e[1] ? e : [e[1], e[0]]));
+    return [...map.values()];
+  }
+  function layoutOrder2(notes) {
+    const rank = (n) => n.pinned ? 0 : n.archived ? 3 : isStale2(n) ? 2 : 1;
+    return notes.map((n, i) => [rank(n), i, n]).sort((x, y) => x[0] - y[0] || x[1] - y[1]).map((t) => t[2]);
+  }
+  var archiveStale2 = (notes, now = Date.now()) => {
+    let moved = 0;
+    const out = notes.map((n) => {
+      if (n.archived || !isStale2(n, now)) return n;
+      moved++;
+      return __spreadProps(__spreadValues({}, n), { archived: now });
+    });
+    return { notes: out, moved };
+  };
+  var archiveNote2 = (notes, id, now = Date.now()) => notes.map((n) => n.id === id && !n.archived ? __spreadProps(__spreadValues({}, n), { archived: now }) : n);
+  var restoreAll2 = (notes) => notes.map((n) => n.archived ? __spreadProps(__spreadValues({}, n), { archived: null }) : n);
+  function wakeArchived2(notes, raw, tagsSel = []) {
+    const revived = [];
+    const q = raw.toLowerCase();
+    if (!q && !tagsSel.length) return { notes, revived };
+    const out = notes.map((n0) => {
+      if (!n0.archived) return n0;
+      const hit = !!q && (n0.text || "").toLowerCase().includes(q) || tagsSel.length > 0 && matchTags2(n0.text || "", tagsSel);
+      if (hit) {
+        revived.push(n0);
+        return __spreadProps(__spreadValues({}, n0), { archived: null });
+      }
+      return n0;
+    });
+    return { notes: out, revived };
+  }
+  function wakeDue2(notes, now = Date.now()) {
+    const revived = [];
+    const out = notes.map((n0) => {
+      if (n0.archived && n0.remindAt && !n0.notified && now >= n0.remindAt) {
+        revived.push(n0);
+        return __spreadProps(__spreadValues({}, n0), { archived: null });
+      }
+      return n0;
+    });
+    return { notes: out, revived };
+  }
+  var layoutCount2 = (notes) => notes.length;
+  function noteFileName2(text, ext) {
+    const base = plainTitle2(text).replace(/[\\/:*?"<>|#]+/g, "_").replace(/\s+/g, " ").trim().slice(0, 40).replace(/^[_ .]+|[_ .]+$/g, "");
+    return `${base || "\u672A\u547D\u540D\u4FBF\u7B7E"}.${ext}`;
+  }
+  var TAG_EXTRACT = new RegExp("(?<![/\\w#~@'`.\\-])#([\\p{L}_][\\p{L}\\p{N}_.\\-]{0,19})(?![\\p{L}\\p{N}_\\-.])", "gu");
+  var stripCode = (src) => src.replace(/```[\s\S]*?(?:```|$)/g, " ").replace(/`[^`\n]*`/g, " ");
+  function extractTags2(text) {
+    const seen = /* @__PURE__ */ new Map();
+    const s = stripCode(String(text || ""));
+    let m;
+    TAG_EXTRACT.lastIndex = 0;
+    while (m = TAG_EXTRACT.exec(s)) {
+      const label = m[1];
+      if (/^[\p{N}_.\-]+$/u.test(label)) continue;
+      const key = label.toLowerCase();
+      if (!seen.has(key)) seen.set(key, label);
+    }
+    return [...seen.values()];
+  }
+  function aggregateTags2(notes) {
+    const map = /* @__PURE__ */ new Map();
+    for (const n of notes) for (const label of extractTags2(n.text || "")) {
+      const key = label.toLowerCase();
+      const e = map.get(key);
+      if (e) e.count++;
+      else map.set(key, { key, label, count: 1 });
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "zh"));
+  }
+  function matchTags2(text, selKeys) {
+    if (!selKeys.length) return true;
+    const have = new Set(extractTags2(text).map((t) => t.toLowerCase()));
+    return selKeys.every((k) => have.has(k));
+  }
+  var SYN_SET = /* @__PURE__ */ new Set(["off", "auto", "onedark", "gruvbox"]);
+  var normSyntax2 = (v, dflt = "off") => typeof v === "string" && SYN_SET.has(v) ? v : dflt;
+  var normOverride2 = (v) => typeof v === "string" && SYN_SET.has(v) ? v : null;
+  function resolveTheme2(note, globalSyntax, isDark) {
+    var _a;
+    const o = (_a = note.overrideTheme) != null ? _a : null;
+    if (o === "onedark" || o === "gruvbox") return o;
+    if (o === "off") return "paper";
+    if (o === "auto") return isDark ? "onedark" : "gruvbox";
+    switch (globalSyntax) {
+      case "onedark":
+        return "onedark";
+      case "gruvbox":
+        return "gruvbox";
+      case "auto":
+        return isDark ? "onedark" : "gruvbox";
+      default:
+        return "paper";
+    }
+  }
+  return __toCommonJS(s_exports);
+})();
+var { SCHEMA, APP_VERSION, STORE_KEY, LEGACY_STORE_KEYS, PALETTE, MIN_W, MIN_H, DEF_W, DEF_H, BAR_H, clamp, uid, pad2, isHex, ui, viewport, COLLAPSED_H, STALE_DAYS, fitNote, newNote, toInput, fromInput, dayTag, remindBadge, noteDate, inkFor, normalizeNoteList, escHTML, mdInline, renderMD, plainTitle, isoLocal, applyFold, toggleTaskLine, foldAll, unfoldAll, ARR_GAP, ARR_TOP_GAP, layoutTopRow, layoutLeftCol, isArchived, isStale, isTodo, parseSearch, tokenCount, searchMatch, normalizeEdges, mergeEdges, layoutOrder, archiveStale, archiveNote, restoreAll, wakeArchived, wakeDue, layoutCount, noteFileName, extractTags, aggregateTags, matchTags, normSyntax, normOverride, resolveTheme } = StickyCore;
+</script>
+<script>"use strict";
+var __defProp = Object.defineProperty;
+var __defProps = Object.defineProperties;
+var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
+var __getOwnPropSymbols = Object.getOwnPropertySymbols;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __propIsEnum = Object.prototype.propertyIsEnumerable;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __spreadValues = (a, b) => {
+  for (var prop in b || (b = {}))
+    if (__hasOwnProp.call(b, prop))
+      __defNormalProp(a, prop, b[prop]);
+  if (__getOwnPropSymbols)
+    for (var prop of __getOwnPropSymbols(b)) {
+      if (__propIsEnum.call(b, prop))
+        __defNormalProp(a, prop, b[prop]);
+    }
+  return a;
+};
+var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
+let state = { schema: 4, notes: [], theme: null, edges: [], lastExport: void 0, syntax: "off" };
+let zTop = 10, selectedId = null, lastDeleted = null;
+const firedDue = /* @__PURE__ */ new Set();
+const noteEls = /* @__PURE__ */ new Map();
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+function load() {
+  let raw = null;
+  try {
+    for (const k of [STORE_KEY, ...LEGACY_STORE_KEYS]) {
+      const v = localStorage.getItem(k);
+      if (v) {
+        raw = JSON.parse(v);
+        if (raw) break;
+      }
+    }
+  } catch (e) {
+  }
+  if (raw && Array.isArray(raw.notes)) {
+    state.theme = raw.theme || null;
+    state.lastExport = typeof raw.lastExport === "number" ? raw.lastExport : void 0;
+    state.notes = raw.notes.map((n) => Object.assign({
+      id: uid(),
+      text: "",
+      x: 60,
+      y: 100,
+      w: DEF_W,
+      h: DEF_H,
+      color: PALETTE[0].hex,
+      remindAt: null,
+      notified: false,
+      pinned: false,
+      collapsed: false,
+      hExp: DEF_H,
+      archived: null,
+      overrideTheme: null,
+      rot: 0,
+      z: ++zTop,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    }, n));
+    state.notes.forEach((n) => {
+      var _a;
+      n.text = String((_a = n.text) != null ? _a : "");
+      n.rot = 0;
+      n.collapsed = !!n.collapsed;
+      n.hExp = n.hExp || n.h;
+      n.archived = n.archived || null;
+      n.overrideTheme = normOverride(n.overrideTheme);
+    });
+    state.edges = normalizeEdges(raw.edges, (id) => state.notes.some((x) => x.id === id));
+    state.syntax = normSyntax(raw.syntax);
+  } else {
+    seedWelcome();
+  }
+}
+function seedWelcome() {
+  state.edges = state.edges || [];
+  const w = mkNote({ text: "# \u6B22\u8FCE\u6765\u5230\u4FBF\u7B7E\u53F0\n\n- [ ] \u70B9\u6211\u6253\u4E2A\u52FE\u8BD5\u8BD5\n- \u62D6\u628A\u624B\u79FB\u52A8\uFF0C\u62D6\u53F3\u4E0B\u89D2\u7F29\u653E\n\n**\u22EF \u83DC\u5355**\uFF1A\u989C\u8272 / \u63D0\u9192 / \u7F6E\u9876 / \u590D\u5236\n**\u25C0 \u7BAD\u5934**\uFF1A\u6536\u8D77\u6210\u4E00\u6761\u6807\u9898\n> \u53CC\u51FB\u6B63\u6587\u7F16\u8F91 Markdown\uFF0C\u5931\u7126\u81EA\u52A8\u6E32\u67D3", y: 130 });
+  state.notes = [w];
+  save();
+}
+let saveTimer = null;
+function saveNow() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  } catch (e) {
+    toast("\u672C\u5730\u5B58\u50A8\u5199\u5165\u5931\u8D25\uFF0C\u8BF7\u6E05\u7406\u6D4F\u89C8\u5668\u7A7A\u95F4", { warn: true });
+  }
+}
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 250);
+}
+addEventListener("pagehide", () => {
+  if (saveTimer) saveNow();
+});
+function splitRow(line) {
+  const t = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  return t.split(new RegExp("(?<!\\\\)\\|"));
+}
+const TBL_DELIM = /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/;
+function alignOf(cell) {
+  const t = cell.trim();
+  if (t.startsWith(":") && t.endsWith(":")) return "center";
+  if (t.endsWith(":")) return "right";
+  if (t.startsWith(":")) return "left";
+  return "";
+}
+const thStyle = (a) => a ? ` style="text-align:${a}"` : "";
+const cellMD = (c) => mdInline(c.trim().replace(/\\\|/g, "|"));
+function normEdgeKey(e) {
+  return e[0] < e[1] ? e[0] + "~" + e[1] : e[1] + "~" + e[0];
+}
+const canvas = $("#canvas"), emptyBox = $("#empty"), noResult = $("#noresult");
+const getNote = (id) => state.notes.find((n) => n.id === id);
+function mkNote(o = {}) {
+  const i = state.notes.length;
+  return Object.assign({
+    id: uid(),
+    text: "",
+    x: clamp(90 + i % 6 * 34, 8, innerWidth - DEF_W - 8),
+    y: clamp(100 + i % 6 * 30, BAR_H + 12, innerHeight - DEF_H - 8),
+    w: DEF_W,
+    h: DEF_H,
+    color: PALETTE[i % 5].hex,
+    remindAt: null,
+    notified: false,
+    pinned: false,
+    collapsed: false,
+    hExp: DEF_H,
+    archived: null,
+    overrideTheme: null,
+    rot: 0,
+    // 纸感微旋已移除：保证滚动条与内容像素对齐（v5）
+    z: ++zTop,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  }, o);
+}
+const FOLD_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function makeNoteEl(n) {
+  const el = document.createElement("article");
+  el.className = "note" + (n.collapsed ? " collapsed" : "");
+  el.dataset.id = n.id;
+  el.innerHTML = `
+    <header class="note-grip" title="\u62D6\u52A8\u79FB\u52A8\u4F4D\u7F6E">
+      <button class="note-fold" aria-label="\u6536\u8D77\u6216\u5C55\u5F00" title="${n.collapsed ? "\u5C55\u5F00" : "\u6536\u8D77"}">${FOLD_SVG}</button>
+      <span class="note-title"></span>
+      <span class="grip-spacer"></span>
+      <span class="note-clock" hidden><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3.5 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><i></i></span>
+      <button class="note-pin-btn" aria-pressed="false" aria-label="\u7F6E\u9876" title="\u7F6E\u9876"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M9 3h6M10 3v6l-2.5 3.5h9L14 9V3M12 12.5V21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="note-save-btn" title="\u53E6\u5B58\u4E3A\u6587\u4EF6" aria-label="\u53E6\u5B58\u4E3A\u6587\u4EF6"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M12 3v10m0 0l-3.5-3.5M12 13l3.5-3.5M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="note-theme-btn" title="\u8BED\u6CD5\u4E3B\u9898" aria-label="\u9009\u62E9\u8BED\u6CD5\u4E3B\u9898"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h1.5a2 2 0 0 0 1.4-3.4 2 2 0 0 1 1.4-3.4H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3zM7.5 10a1.4 1.4 0 1 1 0-2.8 1.4 1.4 0 0 1 0 2.8zm4-3a1.4 1.4 0 1 1 0-2.8 1.4 1.4 0 0 1 0 2.8zm5.6 1.4a1.4 1.4 0 1 1 0-2.8 1.4 1.4 0 0 1 0 2.8z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></button>
+      <span class="note-date"></span>
+      <button class="note-menu" title="\u66F4\u591A\u64CD\u4F5C">\u22EF</button>
+    </header>
+    <div class="note-body">
+      <textarea class="note-text" spellcheck="false" placeholder="\u8BB0\u70B9\u4EC0\u4E48\u2026\uFF08\u652F\u6301 # \u6807\u9898\u3001**\u7C97**\u3001- [ ] \u6E05\u5355\uFF09" hidden></textarea>
+      <div class="md-view" title="\u53CC\u51FB\u7F16\u8F91" tabindex="0"></div>
+    </div>
+    <footer class="note-foot"></footer>
+    <button class="note-resize" aria-label="\u62D6\u52A8\u7F29\u653E" title="\u62D6\u52A8\u7F29\u653E"></button>`;
+  const q = el._q = {
+    ta: $(".note-text", el),
+    date: $(".note-date", el),
+    pin: $(".note-pin-btn", el),
+    save: $(".note-save-btn", el),
+    title: $(".note-title", el),
+    view: $(".md-view", el),
+    fold: $(".note-fold", el),
+    clock: $(".note-clock", el),
+    foot: $(".note-foot", el),
+    menu: $(".note-menu", el),
+    tbtn: $(".note-theme-btn", el),
+    grip: $(".note-grip", el),
+    handle: $(".note-resize", el)
+  };
+  const enterEdit = () => {
+    if (el._editing || n.collapsed) return;
+    el._editing = true;
+    q.ta.value = n.text;
+    q.ta.hidden = false;
+    q.view.hidden = true;
+    q.ta.focus();
+    q.ta.setSelectionRange(q.ta.value.length, q.ta.value.length);
+  };
+  const exitEdit = () => {
+    if (!el._editing) return;
+    el._editing = false;
+    q.ta.hidden = true;
+    q.view.hidden = false;
+    syncMD(n);
+  };
+  q.ta.value = n.text;
+  q.ta.addEventListener("input", () => {
+    n.text = q.ta.value;
+    q.title.textContent = plainTitle(n.text);
+    n.updatedAt = Date.now();
+    save();
+    refreshStatus();
+    refreshShelfSoon();
+  });
+  q.ta.addEventListener("blur", exitEdit);
+  q.ta.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    select(n);
+  });
+  q.ta.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      exitEdit();
+    }
+  });
+  q.view.addEventListener("dblclick", enterEdit);
+  q.view.addEventListener("pointerdown", (e) => e.stopPropagation());
+  q.view.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      enterEdit();
+    }
+  });
+  q.view.addEventListener("change", (e) => {
+    const li = e.target.closest("input[data-l]");
+    if (!li) return;
+    const idx = +li.dataset.l, ls = n.text.split("\n");
+    if (ls[idx]) {
+      ls[idx] = ls[idx].replace(/^(\s*[-*]\s+\[)( |x|X)(\])/, (m0, a, c, b) => a + (c === " " ? "x" : " ") + b);
+      n.text = ls.join("\n");
+      n.updatedAt = Date.now();
+      q.title.textContent = plainTitle(n.text);
+      save();
+      refreshStatus();
+      syncMD(n);
+      select(n);
+    }
+  });
+  q.fold.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleFold(n);
+  });
+  q.pin.addEventListener("click", (e) => {
+    e.stopPropagation();
+    togglePin(n);
+  });
+  q.enterEdit = enterEdit;
+  q.exitEdit = exitEdit;
+  q.menu.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openMenu(n, q.menu);
+  });
+  q.tbtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openThemePicker(n, q.tbtn);
+  });
+  q.save.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openExportPicker(n, q.save);
+  });
+  q.foot.addEventListener("click", (e) => {
+    e.stopPropagation();
+    select(n);
+    openMenu(n, q.foot, focusRemind);
+  });
+  dragify(q.grip, el, (dx, dy, start) => {
+    place(n, start.x + dx, start.y + dy);
+    syncGeom(n);
+    afterGeomMove();
+  }, () => save());
+  dragify(q.handle, el, (dx, dy, start) => {
+    n.w = clamp(start.w + dx, MIN_W, innerWidth - n.x - 6);
+    n.h = clamp(start.h + dy, MIN_H, innerHeight - n.y - 6);
+    syncGeom(n);
+    afterGeomMove();
+    el.classList.add("dragging");
+  }, () => {
+    el.classList.remove("dragging");
+    save();
+  });
+  noteEls.set(n.id, el);
+  canvas.appendChild(el);
+  syncGeom(n);
+  syncChrome(n);
+  return el;
+}
+function syncMD(n) {
+  const el = noteEls.get(n.id);
+  if (!el || el._editing) return;
+  const q = el._q;
+  q.view.innerHTML = renderMD(n.text);
+  q.title.textContent = plainTitle(n.text) || "\u65B0\u4FBF\u7B7E";
+  if (!n.text.trim()) q.view.innerHTML = '<p class="md-empty" style="opacity:.45">\u53CC\u51FB\u8FD9\u91CC\u5199\u70B9\u4EC0\u4E48\uFF08\u652F\u6301 Markdown\uFF09</p>';
+}
+function toggleFold(m) {
+  const n = getNote(m.id);
+  if (!n) return;
+  const w = applyFold(n);
+  for (const key in w) if (key !== "id") n[key] = w[key];
+  const el = noteEls.get(n.id);
+  if (el) {
+    el._editing = false;
+    el._q.ta.hidden = true;
+    el._q.view.hidden = false;
+    el.classList.toggle("collapsed", !!n.collapsed);
+    el._q.fold.title = n.collapsed ? "\u5C55\u5F00" : "\u6536\u8D77";
+    place(n, n.x, n.y);
+    syncGeom(n);
+    syncChrome(n);
+    afterGeomMove();
+    save();
+    updateFoldAllBtn();
+  }
+}
+function dragify(source, subject, onMove, onEnd) {
+  source.addEventListener("pointerdown", (e) => {
+    if (e.button > 0 || e.target.closest(".note-menu, .note-fold, .note-pin-btn, .note-theme-btn, .note-save-btn")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const n = getNote(subject.dataset.id);
+    if (!n) return;
+    select(n);
+    raise(n);
+    const start = {
+      x: n.x,
+      y: n.y,
+      w: n.w,
+      h: n.h,
+      px: e.clientX,
+      py: e.clientY,
+      pid: e.pointerId
+    };
+    source.setPointerCapture(e.pointerId);
+    subject.classList.add("dragging");
+    const move = (ev) => onMove(ev.clientX - start.px, ev.clientY - start.py, start);
+    const up = () => {
+      source.removeEventListener("pointermove", move);
+      subject.classList.remove("dragging");
+      onEnd && onEnd();
+    };
+    source.addEventListener("pointermove", move);
+    source.addEventListener("pointerup", up);
+    source.addEventListener("pointercancel", up);
+  });
+}
+function place(n, x, y) {
+  const minTop = BAR_H + 1 + (ui.top || 0);
+  n.x = clamp(Math.round(x), 4, Math.max(4, innerWidth - n.w - 4));
+  n.y = clamp(Math.round(y), minTop, Math.max(minTop, innerHeight - n.h - 4));
+}
+function syncGeom(n) {
+  const el = noteEls.get(n.id);
+  if (!el) return;
+  Object.assign(el.style, {
+    left: n.x + "px",
+    top: n.y + "px",
+    width: n.w + "px",
+    height: n.h + "px",
+    zIndex: n.z + (n.pinned ? 1e6 : 0)
+  });
+  el.style.setProperty("--rot", n.rot + "deg");
+}
+function syncChrome(n) {
+  const el = noteEls.get(n.id);
+  if (!el) return;
+  const q = el._q;
+  const thm = resolveTheme(n, state.syntax || "off", document.documentElement.dataset.theme === "dark");
+  el.classList.remove("thm-onedark", "thm-gruvbox");
+  if (thm === "paper") {
+    el.style.setProperty("--nc", n.color);
+    el.style.setProperty("--ink", inkFor(n.color));
+  } else {
+    el.style.removeProperty("--nc");
+    el.style.removeProperty("--ink");
+    el.classList.add("thm-" + thm);
+  }
+  q.tbtn.classList.toggle("is-on", thm !== "paper");
+  syncMD(n);
+  q.pin.classList.toggle("on", !!n.pinned);
+  el.classList.toggle("stale", isStale(n));
+  q.pin.title = n.pinned ? "\u53D6\u6D88\u7F6E\u9876" : "\u7F6E\u9876";
+  q.pin.setAttribute("aria-pressed", String(!!n.pinned));
+  q.clock.hidden = !n.remindAt;
+  if (n.remindAt) {
+    const nowT = Date.now(), o = n.remindAt <= nowT;
+    $("i", q.clock).textContent = o && n.notified ? "\u5DF2\u63D0\u9192" : remindBadge(n.remindAt, nowT);
+    q.clock.classList.toggle("overdue", o);
+    q.clock.title = dayTag(n.remindAt);
+  }
+  const d = new Date(n.updatedAt || n.createdAt);
+  q.date.textContent = `${d.getMonth() + 1}/${d.getDate()}`;
+  if (n.remindAt) {
+    const over = n.remindAt <= Date.now();
+    const txt = over ? n.notified ? "\u5DF2\u63D0\u9192 \xB7 " + dayTag(n.remindAt) : remindBadge(n.remindAt) : remindBadge(n.remindAt);
+    q.foot.innerHTML = "";
+    const tag = document.createElement("span");
+    tag.className = "remind" + (over ? " overdue" : "");
+    tag.innerHTML = `<svg viewBox="0 0 24 24" class="ico"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3.5 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><i style="font-style:normal"></i>`;
+    $("i", tag).textContent = txt;
+    q.foot.appendChild(tag);
+  } else if (q.foot.firstChild) q.foot.innerHTML = "";
+}
+const syncAllChrome = () => state.notes.forEach(syncChrome);
+function raise(m) {
+  const n = getNote(m.id);
+  if (!n) return;
+  n.z = ++zTop;
+  syncGeom(n);
+  save();
+}
+function select(n) {
+  selectedId = n ? n.id : null;
+  noteEls.forEach((el, id) => el.classList.toggle("selected", id === selectedId));
+}
+function renderAll() {
+  noteEls.forEach((el) => el.remove());
+  noteEls.clear();
+  state.notes.filter((n) => !n.archived).forEach((n) => makeNoteEl(n));
+  updateEmpty();
+  refreshStatus();
+  applySearch();
+  drawEdges();
+  renderShelf();
+}
+function updateEmpty() {
+  emptyBox.hidden = wallNotes().length > 0;
+  syncTodoBtn == null ? void 0 : syncTodoBtn();
+}
+function statusText() {
+  const w = wallNotes();
+  if (!w.length) return "";
+  const pend = w.filter((n) => n.remindAt && !n.notified).length;
+  const tdc = w.filter(isTodo).length, stc = w.filter((n) => isStale(n)).length;
+  return `${w.length} \u5F20\u4FBF\u7B7E \xB7 ${pend} \u4E2A\u5F85\u63D0\u9192${tdc ? ` \xB7 ${tdc} \u5F85\u529E` : ""}${stc ? ` \xB7 ${stc} \u6C89\u6DC0` : ""}`;
+}
+function toggleTag(k) {
+  tagsSel = tagsSel.includes(k) ? tagsSel.filter((x) => x !== k) : [...tagsSel, k];
+  renderShelf();
+  applySearch();
+}
+let _shelfT = null;
+function refreshShelfSoon() {
+  clearTimeout(_shelfT);
+  _shelfT = setTimeout(() => {
+    renderShelf();
+    applySearch();
+  }, 400);
+}
+function refreshStatus() {
+  updateExportHint();
+}
+function createNote() {
+  $("#search").value = "";
+  applySearch();
+  const n = mkNote();
+  place(
+    n,
+    (innerWidth - DEF_W) / 2 + state.notes.length % 5 * 30 - 60,
+    (innerHeight - DEF_H) / 2 + state.notes.length % 5 * 26 - 40
+  );
+  state.notes.push(n);
+  renderAll();
+  select(n);
+  raise(n);
+  save();
+  noteEls.get(n.id)._q.enterEdit();
+  return n;
+}
+function duplicateNote(n) {
+  $("#search").value = "";
+  applySearch();
+  const c = mkNote(__spreadProps(__spreadValues({}, n), {
+    id: uid(),
+    x: n.x + 22,
+    y: n.y + 22,
+    pinned: false,
+    z: ++zTop,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    notified: false
+  }));
+  state.notes.push(c);
+  renderAll();
+  select(c);
+  save();
+  drawEdges();
+  toast("\u5DF2\u590D\u5236\u4FBF\u7B7E");
+}
+function deleteNote(id) {
+  const i = state.notes.findIndex((n) => n.id === id);
+  if (i < 0) return;
+  lastDeleted = state.notes.splice(i, 1)[0];
+  const deadEdges = (state.edges || []).filter((e) => e.includes(id));
+  state.edges = (state.edges || []).filter((e) => !e.includes(id));
+  if (selectedId === id) selectedId = null;
+  if (linkFrom === id) cancelLink();
+  renderAll();
+  drawEdges();
+  save();
+  toast("\u4FBF\u7B7E\u5DF2\u5220\u9664", { action: "\u64A4\u9500", onAction: () => {
+    if (!lastDeleted) return;
+    state.notes.push(lastDeleted);
+    lastDeleted = null;
+    state.edges = mergeEdges(state.edges || [], deadEdges);
+    renderAll();
+    drawEdges();
+    save();
+    toast("\u5DF2\u6062\u590D");
+  } });
+}
+</script>
+<script>var __defProp = Object.defineProperty;
+var __defProps = Object.defineProperties;
+var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
+var __getOwnPropSymbols = Object.getOwnPropertySymbols;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __propIsEnum = Object.prototype.propertyIsEnumerable;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __spreadValues = (a, b) => {
+  for (var prop in b || (b = {}))
+    if (__hasOwnProp.call(b, prop))
+      __defNormalProp(a, prop, b[prop]);
+  if (__getOwnPropSymbols)
+    for (var prop of __getOwnPropSymbols(b)) {
+      if (__propIsEnum.call(b, prop))
+        __defNormalProp(a, prop, b[prop]);
+    }
+  return a;
+};
+var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
+const menuLayer = $("#menu-layer");
+let menuEl = null;
+const focusRemind = (m) => {
+  const i = $(".r-dt", m);
+  if (i) i.focus();
+};
+function setColor(n, hex) {
+  n.color = hex;
+  n.updatedAt = Date.now();
+  syncChrome(n);
+  save();
+  if (menuEl) $$(".sw", menuEl).forEach((s) => s.classList.toggle("on", s.dataset.hex === hex));
+}
+function setRemind(n, ts) {
+  n.remindAt = ts;
+  n.notified = false;
+  n.updatedAt = Date.now();
+  firedDue.delete(n.id);
+  syncChrome(n);
+  refreshStatus();
+  save();
+  if (ts) askNotifyPermission(true);
+  toast(ts ? `\u5DF2\u8BBE\u63D0\u9192 \xB7 ${dayTag(ts)}` : "\u5DF2\u6E05\u9664\u63D0\u9192");
+}
+function togglePin(m) {
+  const n = getNote(m.id);
+  if (!n) return false;
+  n.pinned = !n.pinned;
+  syncGeom(n);
+  syncChrome(n);
+  save();
+  return n.pinned;
+}
+function openMenu(n, anchor, afterBuild) {
+  closeMenu();
+  select(n);
+  const m = menuEl = document.createElement("div");
+  m.className = "menu";
+  m.setAttribute("role", "menu");
+  m.innerHTML = `
+    <div>
+      <div class="menu-label">\u4FBF\u7B7E\u989C\u8272</div>
+      <div class="swatches">
+        ${PALETTE.map((p) => `<button class="sw ${p.hex === n.color ? "on" : ""}" data-hex="${p.hex}" title="${p.name}" style="--c:${p.hex}"></button>`).join("")}
+        <label class="sw-custom" title="\u81EA\u5B9A\u4E49\u989C\u8272">
+          <input type="color" value="${isHex(n.color) ? n.color : "#ffe9a8"}"><span>+</span>
+        </label>
+      </div>
+    </div>
+    <div>
+      <div class="menu-label">\u5230\u671F\u63D0\u9192</div>
+      <input type="datetime-local" class="r-dt" value="${toInput(n.remindAt)}">
+      <div class="quick-row">
+        <button class="chip" data-plus="1800">30 \u5206\u949F\u540E</button>
+        <button class="chip" data-clock="20">\u4ECA\u665A 20:00</button>
+        <button class="chip" data-tom="9">\u660E\u5929 09:00</button>
+        <button class="chip" data-act="clear" style="background:color-mix(in oklab,var(--danger) 12%,transparent);color:var(--danger)" ${n.remindAt ? "" : "hidden"}>\u6E05\u9664</button>
+      </div>
+    </div>
+    <div class="menu-acts">
+      <button class="mi ${n.pinned ? "on" : ""}" data-act="pin">${n.pinned ? "\u53D6\u6D88\u7F6E\u9876" : "\u7F6E\u9876\u8FD9\u5F20"}</button>
+      <button class="mi" data-act="dup">\u590D\u5236\u4E00\u4EFD</button>
+    <button class="mi" data-act="link">\u5173\u8054\u5230\u2026</button>
+    <button class="mi" data-act="archive">\u5F52\u6863\u8FD9\u5F20</button>
+      <button class="mi danger" data-act="del">\u5220\u9664\u4FBF\u7B7E</button>
+    </div>`;
+  menuLayer.appendChild(m);
+  menuLayer.classList.add("open");
+  const r = anchor.getBoundingClientRect();
+  const mw = m.offsetWidth, mh = m.offsetHeight;
+  let top = r.bottom + 6;
+  if (top + mh > innerHeight - 8) top = Math.max(8, r.top - mh - 6);
+  m.style.left = clamp(r.left - mw + 40, 8, innerWidth - mw - 8) + "px";
+  m.style.top = top + "px";
+  m.addEventListener("click", (e) => e.stopPropagation());
+  $$(".sw", m).forEach((s) => s.addEventListener("click", () => setColor(n, s.dataset.hex)));
+  $(".sw-custom input", m).addEventListener("input", (e) => setColor(n, e.target.value));
+  $(".r-dt", m).addEventListener("change", (e) => {
+    const ts = fromInput(e.target.value);
+    if (ts) setRemind(n, ts);
+    else setRemind(n, null);
+    let c = $('[data-act="clear"]', m);
+    if (c) c.hidden = !n.remindAt;
+  });
+  $$(".chip", m).forEach((c) => c.addEventListener("click", () => {
+    if (c.dataset.act === "clear") {
+      $(".r-dt", m).value = "";
+      setRemind(n, null);
+      closeMenu();
+      return;
+    }
+    const now = Date.now();
+    let ts = 0;
+    if (c.dataset.plus) ts = now + c.dataset.plus * 1e3;
+    if (c.dataset.clock) {
+      const d = new Date(now);
+      d.setHours(+c.dataset.clock, 0, 0, 0);
+      ts = d.getTime() > now ? d.getTime() : d.getTime() + 864e5;
+    }
+    if (c.dataset.tom) {
+      const d = new Date(now + 864e5);
+      d.setHours(+c.dataset.tom, 0, 0, 0);
+      ts = d.getTime();
+    }
+    if (ts) {
+      $(".r-dt", m).value = toInput(ts);
+      setRemind(n, ts);
+    }
+  }));
+  $$(".mi", m).forEach((bi) => bi.addEventListener("click", () => {
+    const act = bi.dataset.act;
+    if (act === "pin") {
+      const on = togglePin(n);
+      closeMenu();
+      toast(on ? "\u5DF2\u7F6E\u9876" : "\u5DF2\u53D6\u6D88\u7F6E\u9876");
+    }
+    if (act === "dup") {
+      closeMenu();
+      duplicateNote(n);
+    }
+    if (act === "link") {
+      closeMenu();
+      startLink(n.id);
+    }
+    if (act === "archive") {
+      closeMenu();
+      archiveOne(n.id);
+      renderAll();
+      refreshStatus();
+      save();
+      toast("\u4FBF\u7B7E\u5DF2\u5165\u67B6", { action: "\u64A4\u9500", onAction: () => {
+        state.notes = state.notes.map((x) => x.id === n.id ? __spreadProps(__spreadValues({}, x), { archived: null }) : x);
+        renderAll();
+        save();
+      } });
+    }
+    if (act === "del") {
+      closeMenu();
+      deleteNote(n.id);
+    }
+  }));
+  afterBuild && afterBuild(m);
+}
+function closeMenu() {
+  menuLayer.classList.remove("open");
+  menuLayer.innerHTML = "";
+  menuEl = null;
+}
+menuLayer.addEventListener("pointerdown", (e) => {
+  if (e.target === menuLayer) closeMenu();
+});
+const toastBox = $("#toasts");
+function toast(msg, { warn, action, onAction, timeout = 4200 } = {}) {
+  const el = document.createElement("div");
+  el.className = "toast" + (warn ? " warn" : "");
+  el.innerHTML = `<span class="t-ico">${warn ? "!" : "i"}</span><span class="t-msg"></span>`;
+  $(".t-msg", el).textContent = msg;
+  if (action) {
+    const b = document.createElement("button");
+    b.textContent = action;
+    b.addEventListener("click", () => {
+      onAction && onAction();
+      dismiss();
+    });
+    el.appendChild(b);
+    timeout = 7e3;
+  }
+  toastBox.appendChild(el);
+  const dismiss = () => {
+    el.classList.add("out");
+    setTimeout(() => el.remove(), 260);
+  };
+  setTimeout(dismiss, timeout);
+}
+</script>
+<script>var __defProp = Object.defineProperty;
+var __defProps = Object.defineProperties;
+var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
+var __getOwnPropSymbols = Object.getOwnPropertySymbols;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __propIsEnum = Object.prototype.propertyIsEnumerable;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __spreadValues = (a, b) => {
+  for (var prop in b || (b = {}))
+    if (__hasOwnProp.call(b, prop))
+      __defNormalProp(a, prop, b[prop]);
+  if (__getOwnPropSymbols)
+    for (var prop of __getOwnPropSymbols(b)) {
+      if (__propIsEnum.call(b, prop))
+        __defNormalProp(a, prop, b[prop]);
+    }
+  return a;
+};
+var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
+let AC = null;
+function beep() {
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    AC.resume && AC.resume();
+    const t = AC.currentTime;
+    [[880, 0], [660, 0.18]].forEach(([f, d]) => {
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.type = "sine";
+      o.frequency.value = f;
+      g.gain.setValueAtTime(1e-4, t + d);
+      g.gain.exponentialRampToValueAtTime(0.22, t + d + 0.02);
+      g.gain.exponentialRampToValueAtTime(1e-4, t + d + 0.5);
+      o.connect(g).connect(AC.destination);
+      o.start(t + d);
+      o.stop(t + d + 0.55);
+    });
+  } catch (e) {
+  }
+}
+function askNotifyPermission(hint) {
+  if (!("Notification" in window)) {
+    if (hint) toast("\u6B64\u6D4F\u89C8\u5668\u4E0D\u652F\u6301\u7CFB\u7EDF\u901A\u77E5\uFF0C\u5230\u70B9\u5C06\u7528\u9875\u5185\u63D0\u9192", { warn: true });
+    return;
+  }
+  if (Notification.permission === "default") {
+    Notification.requestPermission().then((p) => {
+      if (p !== "granted" && hint) toast("\u672A\u6388\u6743\u7CFB\u7EDF\u901A\u77E5\uFF0C\u5230\u70B9\u5C06\u7528\u9875\u5185\u63D0\u9192", { warn: true });
+    });
+  } else if (Notification.permission === "denied" && hint) {
+    toast("\u901A\u77E5\u6743\u9650\u5DF2\u88AB\u62D2\u7EDD\uFF0C\u5230\u70B9\u5C06\u7528\u9875\u5185\u63D0\u9192", { warn: true });
+  }
+}
+function afterGeomMove() {
+  if ((state.edges || []).length) drawEdges();
+}
+let themePickFor = null;
+function syncAllThemes() {
+  state.notes.forEach((n) => syncChrome(n));
+}
+function closeExportPicker() {
+  const l = document.getElementById("exp-layer");
+  if (l) l.remove();
+}
+function openExportPicker(n, btn) {
+  closeExportPicker();
+  closeThemePicker();
+  const layer = document.createElement("div");
+  layer.id = "exp-layer";
+  layer.className = "menu-layer open tprevail";
+  const r = btn.getBoundingClientRect();
+  const left = Math.min(Math.max(8, r.left - 8), innerWidth - 212);
+  const top = r.bottom + 100 > innerHeight ? Math.max(8, r.top - 92) : r.bottom + 6;
+  layer.innerHTML = `<div class="menu exp-menu" role="menu" aria-label="\u5BFC\u51FA\u683C\u5F0F" style="left:${left}px;top:${top}px">
+    <button class="mi" data-x="md">\u53E6\u5B58\u4E3A Markdown\uFF08.md\uFF09</button>
+    <button class="mi" data-x="txt">\u53E6\u5B58\u4E3A\u7EAF\u6587\u672C\uFF08.txt\uFF09</button>
+  </div>`;
+  layer.addEventListener("pointerdown", (e) => {
+    if (e.target === layer) closeExportPicker();
+  });
+  layer.querySelectorAll(".mi").forEach((b) => b.addEventListener("click", () => {
+    const ext = b.dataset.x;
+    const blob = new Blob([n.text || ""], { type: ext === "md" ? "text/markdown;charset=utf-8" : "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = noteFileName(n.text, ext);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4e3);
+    toast("\u5DF2\u5BFC\u51FA " + a.download);
+    closeExportPicker();
+  }));
+  document.body.appendChild(layer);
+}
+function openThemePicker(n, anchor) {
+  closeMenu();
+  if (linkFrom) cancelLink();
+  themePickFor = n.id;
+  const layer = document.createElement("div");
+  layer.className = "menu-layer open tprevail";
+  const tp = () => state.syntax || "off";
+  const btn = (label, key, on, chip) => `<button class="mi${on ? " on" : ""}" data-v="${key}">${label}${chip || ""}</button>`;
+  const CH = (k) => k === "onedark" ? '<span class="tp-chip" style="background:#282c34;border-color:#5c6370;color:#abb2bf">Aa</span>' : k === "gruvbox" ? '<span class="tp-chip" style="background:#fbf1c7;border-color:#d9c79c;color:#3c3836">Aa</span>' : "";
+  layer.innerHTML = '<div class="menu tp"><div class="tp-label">\u8FD9\u5F20\u4FBF\u7B7E</div>' + btn("\u8DDF\u968F\u5168\u5C40", "n:", !n.overrideTheme) + btn("\u7EB8\u8272\uFF08\u5173\uFF09", "n:off", n.overrideTheme === "off") + btn("One Dark", "n:onedark", n.overrideTheme === "onedark", CH("onedark")) + btn("Gruvbox Light", "n:gruvbox", n.overrideTheme === "gruvbox", CH("gruvbox")) + '<div class="tp-label">\u5168\u5C40\u9ED8\u8BA4 <span class="tp-hint">\uFF08\u4F5C\u7528\u4E8E\u672A\u5355\u72EC\u8BBE\u7F6E\u7684\u4FBF\u7B7E\uFF09</span></div>' + btn("\u81EA\u52A8\uFF08\u6D45 Gruvbox / \u6DF1 One Dark\uFF09", "g:auto", tp() === "auto") + btn("\u7EB8\u8272\uFF08\u5173\uFF09", "g:off", tp() === "off") + btn("One Dark", "g:onedark", tp() === "onedark", CH("onedark")) + btn("Gruvbox Light", "g:gruvbox", tp() === "gruvbox", CH("gruvbox")) + "</div>";
+  document.body.appendChild(layer);
+  const m = layer.firstChild;
+  const r = anchor.getBoundingClientRect();
+  let top = r.bottom + 6;
+  if (top + m.offsetHeight > innerHeight - 8) top = Math.max(8, r.top - m.offsetHeight - 6);
+  m.style.left = clamp(r.left - 40, 8, innerWidth - m.offsetWidth - 8) + "px";
+  m.style.top = top + "px";
+  layer.addEventListener("pointerdown", (e) => {
+    if (e.target === layer) closeThemePicker();
+  });
+  m.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-v]");
+    if (!b) return;
+    const i = b.dataset.v.indexOf(":");
+    const scope = b.dataset.v.slice(0, i), val = b.dataset.v.slice(i + 1) || null;
+    if (scope === "n") {
+      state.notes.forEach((x) => {
+        if (x.id === n.id) x.overrideTheme = val;
+      });
+      toast(!val ? "\u672C\u5361\u5DF2\u8DDF\u968F\u5168\u5C40" : val === "off" ? "\u672C\u5361\u56DE\u7EB8\u8272" : "\u672C\u5361\uFF1A" + (val === "onedark" ? "One Dark" : "Gruvbox Light"));
+    } else {
+      state.syntax = val || "off";
+      toast("\u5168\u5C40\uFF1A" + (!val ? "\u8DDF\u968F\u5168\u5C40" : val === "auto" ? "\u8DDF\u968F\u660E\u6697" : val === "off" ? "\u7EB8\u8272\uFF08\u5173\uFF09" : val === "onedark" ? "One Dark" : "Gruvbox Light"));
+    }
+    save();
+    syncAllThemes();
+    closeThemePicker();
+  });
+}
+function closeThemePicker() {
+  themePickFor = null;
+  $$(".tprevail").forEach((x) => x.remove());
+}
+addEventListener("resize", closeThemePicker);
+function jumpTo(n) {
+  var _a;
+  closeMenu();
+  select(n);
+  (_a = noteEls.get(n.id)) == null ? void 0 : _a.scrollIntoView({ block: "center" });
+}
+function fireDue(n) {
+  n.notified = true;
+  save();
+  refreshStatus();
+  syncChrome(n);
+  const el = noteEls.get(n.id);
+  if (el) {
+    el.classList.add("ping");
+    setTimeout(() => el.classList.remove("ping"), 4600);
+  }
+  beep();
+  const body = (n.text.trim().split("\n")[0] || "\uFF08\u7A7A\u767D\u4FBF\u7B7E\uFF09").slice(0, 60);
+  if ("Notification" in window && Notification.permission === "granted") {
+    try {
+      const nt = new Notification("\u4FBF\u7B7E\u5230\u671F\u63D0\u9192", { body, tag: "note-" + n.id });
+      nt.onclick = () => {
+        window.focus();
+        jumpTo(n);
+      };
+    } catch (e) {
+    }
+  } else {
+    toast(`\u5230\u671F\u63D0\u9192\uFF1A${body}`, { action: "\u53BB\u770B\u770B", onAction: () => jumpTo(n), timeout: 9e3 });
+  }
+}
+function edgeCentroid(n) {
+  return { x: n.x + n.w / 2, y: n.collapsed ? n.y + 18 : n.y + 30 + Math.min(n.h - 30, 96) / 2 };
+}
+function drawEdges() {
+  const layer = $("#edge-layer");
+  if (!layer) return;
+  layer.innerHTML = "";
+  (state.edges || []).forEach((e) => {
+    const a0 = getNote(e[0]), b0 = getNote(e[1]);
+    if (!a0 || !b0) return;
+    if (a0.archived || b0.archived) return;
+    const a = a0, b = b0;
+    const p1 = edgeCentroid(a), p2 = edgeCentroid(b);
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2 + 26;
+    path.setAttribute("d", `M${p1.x} ${p1.y} Q ${mx} ${my} ${p2.x} ${p2.y}`);
+    path._edge = e;
+    path.addEventListener("pointerdown", (ev) => {
+      ev.stopPropagation();
+      removeLink(e);
+    });
+    layer.appendChild(path);
+  });
+}
+function addLink(a, b) {
+  if (a === b) {
+    toast("\u4E0D\u80FD\u548C\u81EA\u5DF1\u5173\u8054");
+    return;
+  }
+  state.edges = mergeEdges(state.edges || [], [[a, b]]);
+  save();
+  drawEdges();
+}
+function removeLink(e) {
+  const before = (state.edges || []).slice();
+  const at = before.findIndex((x) => x[0] === e[0] && x[1] === e[1]);
+  if (at < 0) return;
+  state.edges.splice(at, 1);
+  save();
+  drawEdges();
+  toast("\u5DF2\u65AD\u5F00\u5173\u8054", { action: "\u64A4\u9500", onAction: () => {
+    state.edges = before;
+    save();
+    drawEdges();
+  } });
+}
+let linkFrom = null;
+function startLink(id) {
+  closeMenu();
+  linkFrom = id;
+  document.body.classList.add("linking");
+  toast("\u518D\u70B9\u4E00\u5F20\u4FBF\u7B7E\u5373\u53EF\u5B8C\u6210\u5173\u8054\uFF08Esc \u53D6\u6D88\uFF09");
+}
+function cancelLink() {
+  if (linkFrom) {
+    linkFrom = null;
+    document.body.classList.remove("linking");
+    toast("\u5DF2\u53D6\u6D88\u5173\u8054");
+  }
+}
+document.addEventListener("pointerdown", (ev) => {
+  if (!linkFrom) return;
+  const card = ev.target.closest ? ev.target.closest(".note") : null;
+  const to = card && card.getAttribute("data-id");
+  if (!to) return;
+  if (to !== linkFrom) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const from = linkFrom;
+    linkFrom = null;
+    document.body.classList.remove("linking");
+    addLink(from, to);
+    toast("\u5DF2\u5173\u8054\u4E24\u5F20\u4FBF\u7B7E");
+  }
+}, true);
+function tick() {
+  const now = Date.now();
+  if (state.notes.some((n) => n.archived)) {
+    if (wakeArchivedDue(now).length) {
+      renderAll();
+      save();
+    }
+  }
+  const due = state.notes.filter((n) => n.remindAt && !n.notified && !firedDue.has(n.id) && now >= n.remindAt);
+  if (due.length) {
+    due.forEach((n) => {
+      firedDue.add(n.id);
+      n.notified = true;
+      syncChrome(n);
+    });
+    save();
+    if (due.length === 1) fireDue(due[0]);
+    else {
+      beep();
+      due.forEach((n) => {
+        const el = noteEls.get(n.id);
+        if (el) {
+          el.classList.add("ping");
+          setTimeout(() => el.classList.remove("ping"), 4600);
+        }
+      });
+      const go = () => jumpTo(due[0]);
+      if ("Notification" in window && Notification.permission === "granted") {
+        try {
+          const nt = new Notification(`\u9519\u8FC7 ${due.length} \u4E2A\u63D0\u9192`, { body: due.map((n) => "\xB7 " + (plainTitle(n.text) || "\u7A7A\u767D\u4FBF\u7B7E")).join("\n").slice(0, 120), tag: "notes-due-batch" });
+          nt.onclick = () => {
+            window.focus();
+            go();
+          };
+        } catch (err) {
+        }
+      } else {
+        toast(`\u9519\u8FC7\u4E86 ${due.length} \u4E2A\u63D0\u9192\uFF08${due.map((n) => dayTag(n.remindAt)).slice(0, 3).join("\u3001")}${due.length > 3 ? " \u7B49" : ""}\uFF09`, { action: "\u53BB\u770B\u770B", onAction: go, timeout: 11e3 });
+      }
+    }
+  }
+  syncAllChrome();
+}
+const searchInput = $("#search");
+let todoOnly = false;
+let tagsSel = [];
+const wallNotes = () => state.notes.filter((n) => !isArchived(n));
+function archiveStaleNow() {
+  let moved = 0;
+  state.notes = state.notes.map((n) => {
+    if (n.archived || !isStale(n)) return n;
+    moved++;
+    return __spreadProps(__spreadValues({}, n), { archived: Date.now() });
+  });
+  return moved;
+}
+function archiveOne(id) {
+  state.notes = state.notes.map((n) => n.id === id && !n.archived ? __spreadProps(__spreadValues({}, n), { archived: Date.now() }) : n);
+}
+function restoreOne(id) {
+  zTop += 1;
+  state.notes = state.notes.map((n) => n.id === id && n.archived ? __spreadProps(__spreadValues({}, n), { archived: null, z: zTop }) : n);
+  renderAll();
+  save();
+  selectAndFocus == null ? void 0 : selectAndFocus(id);
+}
+function restoreAllArch() {
+  state.notes = state.notes.map((n) => n.archived ? __spreadProps(__spreadValues({}, n), { archived: null }) : n);
+  renderAll();
+  save();
+  toast("\u5DF2\u5168\u90E8\u653E\u56DE\u5899\u9762");
+}
+function wakeArchivedBy(raw) {
+  const q = (raw || "").toLowerCase();
+  if (!q && !tagsSel.length) return 0;
+  let revived = 0;
+  state.notes = state.notes.map((n) => {
+    const hit = n.archived && (!!q && (n.text || "").toLowerCase().includes(q) || tagsSel.length > 0 && matchTags(n.text || "", tagsSel));
+    if (hit) {
+      revived++;
+      const r = __spreadProps(__spreadValues({}, n), { archived: null });
+      toast(`\u5DF2\u81EA\u52A8\u653E\u56DE ${plainTitle(n.text) || "\u5F52\u6863\u4FBF\u7B7E"}`);
+      return r;
+    }
+    return n;
+  });
+  return revived;
+}
+function wakeArchivedDue(now = Date.now()) {
+  const revived = [];
+  state.notes = state.notes.map((n) => {
+    if (n.archived && n.remindAt && !n.notified && now >= n.remindAt) {
+      revived.push(n);
+      return __spreadProps(__spreadValues({}, n), { archived: null });
+    }
+    return n;
+  });
+  return revived;
+}
+function renderShelf(now = Date.now()) {
+  var _a, _b, _c, _d;
+  const arch = state.notes.filter(isArchived);
+  const stale = wallNotes().filter((n) => isStale(n, now)).length;
+  const shelf = $("#shelf");
+  if (!shelf) return;
+  const stat = statusText();
+  const aggs = aggregateTags(state.notes);
+  if (!arch.length && !stale && !aggs.length && !stat) {
+    shelf.hidden = true;
+    return;
+  }
+  shelf.hidden = false;
+  const dueSoon = arch.some((n) => n.remindAt && !n.notified && n.remindAt - now < 864e5);
+  shelf.innerHTML = `
+    <div class="shelf-row" ${shelf.classList.contains("open") && arch.length ? "" : "hidden"}></div>
+    <div class="shelf-bar">
+      <button class="s-toggle" aria-expanded="${shelf.classList.contains("open")}">
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M3 9h18M3 9l2-5h14l2 5M4 9v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9M10 13h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>\u5DF2\u5F52\u6863&nbsp;<b>${arch.length}</b>&nbsp;\u5F20</span>
+        <svg viewBox="0 0 24 24" class="s-caret ico ${shelf.classList.contains("open") ? "up" : ""}" aria-hidden="true"><path d="M8 14l4-4 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span class="shelf-meta" aria-label="\u5899\u51B5\u4E0E\u6807\u7B7E">
+        ${stat ? `<span class="sm-stats" aria-live="polite">${stat}</span>` : ""}
+        ${stat && aggs.length ? '<span class="sm-dot" aria-hidden="true">\xB7</span>' : ""}
+        ${aggs.map((t) => `<button class="tag-pill${tagsSel.includes(t.key) ? " on" : ""}" data-k="${t.key}" aria-pressed="${tagsSel.includes(t.key)}" title="${tagsSel.includes(t.key) ? "\u53D6\u6D88\u7B5B\u9009" : "\u6309\u6B64\u6807\u7B7E\u7B5B\u9009\uFF08\u53EF\u591A\u9009\uFF0C\u540C\u65F6\u5305\u542B\uFF09"}">#${t.label}<b>${t.count}</b></button>`).join("")}
+        ${tagsSel.length ? '<button class="tag-pill tag-clear" data-clear="1" title="\u6E05\u9664\u6807\u7B7E\u7B5B\u9009">\u6E05\u9664 \u2715</button>' : ""}
+      </span>
+      <span class="grip-spacer"></span>
+      ${stale ? `<button class="chip s-sink">\u6C89\u6DC0 ${stale} \u5F20 \u2192 \u5165\u67B6</button>` : ""}
+      ${arch.length ? `<button class="chip danger-chip s-restore">\u5168\u90E8\u653E\u56DE</button>` : ""}
+    </div>
+    ${dueSoon ? '<span class="s-hint">\u67B6\u4E0A\u6709\u5361\u4E34\u8FD1\u63D0\u9192 \u2014\u2014 \u5230\u70B9\u4F1A\u81EA\u52A8\u56DE\u4F4D</span>' : ""}`;
+  const row = $(".shelf-row", shelf);
+  if (row && shelf.classList.contains("open")) {
+    arch.forEach((n) => {
+      const card = document.createElement("button");
+      card.className = "arch-card" + (n.remindAt && !n.notified ? " has-due" : "");
+      card.style.setProperty("--nc", n.color);
+      card.style.setProperty("--ink", inkFor(n.color));
+      card.title = "\u653E\u56DE\u5899\u9762";
+      const t = plainTitle(n.text) || "\u7A7A\u767D\u4FBF\u7B7E";
+      const sub = (n.text || "").split("\n").slice(1).join(" ").slice(0, 42) || "\u2014";
+      card.innerHTML = `<b></b><span class="a-sub"></span><span class="a-date">\u5F52\u6863\u4E8E ${new Date(n.archived || n.updatedAt).toLocaleDateString()}</span>`;
+      $("b", card).textContent = t;
+      $(".a-sub", card).textContent = sub;
+      card.addEventListener("click", () => restoreOne(n.id));
+      row.appendChild(card);
+    });
+  }
+  (_a = $(".s-toggle", shelf)) == null ? void 0 : _a.addEventListener("click", () => {
+    shelf.classList.toggle("open");
+    renderShelf();
+  });
+  shelf.querySelectorAll(".tag-pill[data-k]").forEach((b) => b.addEventListener("click", () => toggleTag(b.dataset.k)));
+  (_b = shelf.querySelector(".tag-clear")) == null ? void 0 : _b.addEventListener("click", () => {
+    tagsSel = [];
+    renderShelf();
+    applySearch();
+  });
+  (_c = $(".s-sink", shelf)) == null ? void 0 : _c.addEventListener("click", () => {
+    const m = archiveStaleNow();
+    if (m) {
+      toast(`\u5DF2\u6536\u7EB3 ${m} \u5F20\u6C89\u6DC0\u5361`);
+      renderAll();
+      save();
+    } else toast("\u5F53\u524D\u6CA1\u6709\u6C89\u6DC0\u5361");
+  });
+  (_d = $(".s-restore", shelf)) == null ? void 0 : _d.addEventListener("click", restoreAllArch);
+}
+let selectAndFocus = null;
+function noteMatches(n, raw) {
+  const lower = raw.toLowerCase();
+  if (tagsSel.length && !matchTags(n.text || "", tagsSel)) return false;
+  if (todoOnly && !isTodo(n)) return false;
+  if (!raw) return true;
+  return tokenCount(lower) ? searchMatch(n, parseSearch(lower)) : (n.text || "").toLowerCase().includes(lower);
+}
+function applySearch() {
+  const raw = searchInput.value.trim();
+  if (raw || tagsSel.length) {
+    const rv = wakeArchivedBy(raw);
+    if (rv) {
+      renderAll();
+      save();
+      return;
+    }
+  }
+  const filtering = !!raw || todoOnly || tagsSel.length > 0;
+  let hit = 0;
+  state.notes.forEach((n) => {
+    var _a;
+    const ok = noteMatches(n, raw);
+    if (ok) hit++;
+    (_a = noteEls.get(n.id)) == null ? void 0 : _a.classList.toggle("dim", filtering ? !ok : false);
+  });
+  const clr = $("#search-clear");
+  if (clr) clr.hidden = !searchInput.value.length;
+  const cnt = $("#search-count");
+  const wl = wallNotes();
+  cnt.hidden = !filtering;
+  if (filtering) cnt.textContent = `${hit}/${wl.length}`;
+  noResult.hidden = !filtering || hit > 0 || !wl.length;
+}
+searchInput.addEventListener("input", applySearch);
+$("#search-clear").addEventListener("click", () => {
+  searchInput.value = "";
+  applySearch();
+  searchInput.focus();
+});
+$$("#noresult .chip").forEach((c) => c.addEventListener("click", () => {
+  const add = c.getAttribute("data-add");
+  searchInput.value = (searchInput.value.trim() + " " + add).trim();
+  applySearch();
+  searchInput.focus();
+}));
+selectAndFocus = (id) => {
+  const n = getNote(id);
+  if (n) jumpTo(n);
+};
+searchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.target.value = "";
+    applySearch();
+    e.target.blur();
+  }
+});
+const applyTheme = () => {
+  document.documentElement.dataset.theme = state.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+};
+function toggleTheme() {
+  state.theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  applyTheme();
+  save();
+}
+const helpModal = $("#help-modal");
+const openHelp = (v) => helpModal.hidden = !v;
+$("#btn-help").addEventListener("click", () => openHelp(true));
+$("#btn-help-close").addEventListener("click", () => openHelp(false));
+helpModal.addEventListener("click", (e) => {
+  if (e.target === helpModal) openHelp(false);
+});
+function updateExportHint() {
+  const dot = $("#btn-export .export-dot");
+  if (!dot) return;
+  const due7 = state.notes.length >= 10 && (typeof state.lastExport !== "number" || Date.now() - state.lastExport > 7 * 864e5);
+  dot.hidden = !due7;
+}
+function exportJSON() {
+  state.lastExport = Date.now();
+  saveNow();
+  updateExportHint();
+  const payload = {
+    app: "sticky-board",
+    version: SCHEMA,
+    exportedAt: isoLocal(/* @__PURE__ */ new Date()),
+    theme: state.theme,
+    notes: state.notes,
+    edges: state.edges || []
+  };
+  const name = "\u4FBF\u7B7E\u53F0-\u5907\u4EFD-" + (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) + ".json";
+  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4e3);
+  toast(`\u5DF2\u5BFC\u51FA ${state.notes.length} \u5F20\u4FBF\u7B7E \u2192 ${name}`);
+}
+function importJSON(file) {
+  if (!file) return;
+  if (file.size > 5e6) {
+    toast("\u6587\u4EF6\u8D85\u8FC7 5MB\uFF0C\u5DF2\u62D2\u7EDD\u5BFC\u5165", { warn: true });
+    return;
+  }
+  file.text().then((t) => {
+    let d;
+    try {
+      d = JSON.parse(t);
+    } catch (e) {
+      return toast("\u4E0D\u662F\u6709\u6548\u7684 JSON \u6587\u4EF6", { warn: true });
+    }
+    const arr = Array.isArray(d) ? d : d && Array.isArray(d.notes) ? d.notes : null;
+    if (!arr) return toast("\u6587\u4EF6\u7ED3\u6784\u4E0D\u7B26\uFF1A\u627E\u4E0D\u5230 notes \u6570\u7EC4", { warn: true });
+    if (!arr.length) return toast("\u6587\u4EF6\u91CC\u6CA1\u6709\u4FBF\u7B7E", { warn: true });
+    const ids = new Set(state.notes.map((n) => n.id));
+    const idmap = /* @__PURE__ */ new Map();
+    const merged = [];
+    let renamed = 0;
+    arr.forEach((o) => {
+      if (!o || typeof o !== "object") return;
+      const norm = Object.assign({
+        id: uid(),
+        text: "",
+        x: -1,
+        y: -1,
+        w: DEF_W,
+        h: DEF_H,
+        color: PALETTE[merged.length % 5].hex,
+        remindAt: null,
+        notified: false,
+        pinned: false,
+        collapsed: false,
+        hExp: DEF_H,
+        overrideTheme: null,
+        rot: 0,
+        z: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      }, o);
+      norm.rot = 0;
+      norm.z = ++zTop;
+      if (norm.collapsed && !norm.hExp) norm.hExp = DEF_H;
+      const oldId = norm.id;
+      if (!norm.id || ids.has(norm.id)) {
+        norm.id = uid();
+        renamed++;
+      }
+      idmap.set(oldId, norm.id);
+      ids.add(norm.id);
+      place(norm, norm.x < 0 ? (innerWidth - norm.w) / 2 : norm.x, norm.y < 0 ? BAR_H + 40 : norm.y);
+      merged.push(norm);
+    });
+    if (!merged.length) return toast("\u6CA1\u6709\u53EF\u5BFC\u5165\u7684\u4FBF\u7B7E\u8BB0\u5F55", { warn: true });
+    const inEdges = normalizeEdges(d && d.edges || [], () => true).map(([x, y]) => [idmap.get(x) || x, idmap.get(y) || y]);
+    const dueCount = merged.filter((n0) => n0.remindAt && !n0.notified).length;
+    pendingImport = { merged, inEdges };
+    const bits = ["\u65B0\u589E " + merged.length + " \u5F20"];
+    if (renamed) bits.push(renamed + " \u5F20\u540C\u540D\u5C06\u91CD\u7F16\u53F7");
+    if (dueCount) bits.push(dueCount + " \u5F20\u5E26\u672A\u4E86\u7ED3\u63D0\u9192");
+    toast("\u89E3\u6790\u6210\u529F \xB7 " + bits.join("\uFF0C") + " \u2014\u2014 \u786E\u8BA4\u5408\u5E76\u5BFC\u5165\uFF1F", {
+      action: "\u786E\u8BA4\u5BFC\u5165",
+      onAction: () => {
+        const pj = pendingImport;
+        if (!pj) return;
+        pendingImport = null;
+        searchInput.value = "";
+        todoOnly = false;
+        syncTodoBtn();
+        applySearch();
+        pj.merged.forEach((n0) => {
+          if (n0.remindAt && !n0.notified) firedDue.delete(n0.id);
+        });
+        state.notes.push(...pj.merged);
+        state.edges = normalizeEdges(mergeEdges(state.edges || [], pj.inEdges), (id) => !!getNote(id));
+        renderAll();
+        drawEdges();
+        save();
+        toast("\u5DF2\u5BFC\u5165 " + pj.merged.length + " \u5F20\u4FBF\u7B7E");
+      },
+      timeout: 14e3
+    });
+  }).catch(() => toast("\u8BFB\u53D6\u6587\u4EF6\u5931\u8D25", { warn: true }));
+}
+const FOLD_SVG_ON = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 10V3m0 7l-3-3m3 3l3-3M12 14v7m0-7l-3 3m3-3l3 3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const FOLD_SVG_OFF = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 3v7m0-7l-3 3m3-3l3 3M12 21v-7m0 7l-3-3m3 3l3-3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const someOpen = () => wallNotes().some((n) => !n.pinned && !n.collapsed);
+function updateFoldAllBtn() {
+  const b = $("#btn-foldall");
+  if (!b) return;
+  const folded = !someOpen();
+  b.innerHTML = folded ? FOLD_SVG_OFF : FOLD_SVG_ON;
+  b.title = folded ? "\u5168\u90E8\u5C55\u5F00" : "\u5168\u90E8\u6536\u8D77";
+  b.setAttribute("aria-label", b.title);
+}
+let batchTimer = null;
+function applyBatch(fn) {
+  const next = fn(state.notes.map((n) => __spreadValues({}, n)));
+  const byId = new Map(next.map((n) => [n.id, n]));
+  state.notes.forEach((n0) => {
+    const w = byId.get(n0.id);
+    if (w) {
+      for (const key in w) if (key !== "id") n0[key] = w[key];
+    }
+  });
+  state.notes.forEach((n) => {
+    const el = noteEls.get(n.id);
+    if (!el) return;
+    el.classList.toggle("stale", isStale(n));
+    el.classList.add("arr-move");
+    el.classList.toggle("collapsed", !!n.collapsed);
+    el._q.fold.title = n.collapsed ? "\u5C55\u5F00" : "\u6536\u8D77";
+    syncGeom(n);
+    syncChrome(n);
+  });
+  const _el = $("#edge-layer");
+  if (_el && (state.edges || []).length) _el.classList.add("edge-anim");
+  clearTimeout(batchTimer);
+  batchTimer = setTimeout(() => {
+    $$(".note").forEach((e) => e.classList.remove("arr-move"));
+    if (_el) _el.classList.remove("edge-anim");
+    afterGeomMove();
+  }, 440);
+  afterGeomMove();
+  refreshStatus();
+  save();
+  updateFoldAllBtn();
+}
+function syncTodoBtn() {
+  const b = $("#btn-todo");
+  if (!b) return;
+  b.classList.toggle("on", !!todoOnly);
+  const tdc = state.notes.filter(isTodo).length;
+  b.title = todoOnly ? "\u663E\u793A\u5168\u90E8\u4FBF\u7B7E" : `\u53EA\u770B\u5F85\u529E\uFF08${tdc}\uFF09`;
+}
+$("#btn-todo").addEventListener("click", () => {
+  todoOnly = !todoOnly;
+  syncTodoBtn();
+  applySearch();
+});
+$("#btn-new").addEventListener("click", createNote);
+$("#btn-foldall").addEventListener("click", () => applyBatch(someOpen() ? foldAll : unfoldAll));
+$("#btn-arrange-top").addEventListener("click", () => applyBatch(layoutTopRow));
+$("#btn-arrange-left").addEventListener("click", () => applyBatch(layoutLeftCol));
+$("#btn-export").addEventListener("click", exportJSON);
+$("#btn-import").addEventListener("click", () => $("#file-import").click());
+$("#file-import").addEventListener("change", (e) => {
+  importJSON(e.target.files && e.target.files[0]);
+  e.target.value = "";
+});
+$("#btn-new-empty").addEventListener("click", createNote);
+$("#btn-theme").addEventListener("click", toggleTheme);
+canvas.addEventListener("pointerdown", (e) => {
+  if (e.target === canvas) select(null);
+});
+let resizeTimer = null;
+addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    state.notes.forEach((n) => {
+      if (n.archived) return;
+      n.w = clamp(n.w, MIN_W, Math.max(MIN_W, innerWidth - 12));
+      if (!n.collapsed) n.h = clamp(n.h, MIN_H, Math.max(MIN_H, innerHeight - BAR_H - 12));
+      else n.h = COLLAPSED_H;
+      place(n, n.x, n.y);
+      syncGeom(n);
+    });
+    drawEdges();
+    save();
+  }, 200);
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) tick();
+});
+document.addEventListener("keydown", (e) => {
+  const ae = document.activeElement;
+  const editing = ae && /^(TEXTAREA|INPUT|SELECT)$/.test(ae.tagName);
+  const meta = e.metaKey || e.ctrlKey;
+  if (meta && e.key.toLowerCase() === "n") {
+    e.preventDefault();
+    createNote();
+    return;
+  }
+  if (meta && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    searchInput.focus();
+    return;
+  }
+  if (e.key === "Escape") {
+    if (document.getElementById("exp-layer")) {
+      closeExportPicker();
+      return;
+    }
+    if (themePickFor) {
+      closeThemePicker();
+      return;
+    }
+    if (linkFrom) {
+      cancelLink();
+      return;
+    }
+    if (menuEl) closeMenu();
+    else if (!helpModal.hidden) openHelp(false);
+    else if (editing) ae.blur();
+    else select(null);
+    return;
+  }
+  if (editing) return;
+  if ((e.key === "Delete" || e.key === "Backspace") && selectedId && getNote(selectedId)) {
+    e.preventDefault();
+    deleteNote(selectedId);
+  }
+  if (e.key === "?") {
+    e.preventDefault();
+    openHelp(true);
+  }
+});
+load();
+applyTheme();
+renderAll();
+tick();
+setInterval(tick, 15e3);
+updateFoldAllBtn();
+drawEdges();
+updateExportHint();
+syncTodoBtn();
+function syncTopInset() {
+  const el = $("#toolbar .bar") || $(".bar");
+  if (!el) return;
+  ui.top = Math.max(0, el.offsetHeight - BAR_H);
+  document.documentElement.style.setProperty("--sticky-top-h", BAR_H + ui.top + "px");
+}
+syncTopInset();
+addEventListener("resize", () => setTimeout(syncTopInset, 220));
+setInterval(updateExportHint, 6e4);
+
+/* ============================================================
+ * 便签台 · Tauri v2 桌面集成层（构建时注入，勿手改于产物）
+ * 窗口模型：
+ *   ?w=daemon  隐藏守护窗：全量数据权威、提醒调度、托盘动作、为每张未归档便签开/关窗
+ *   ?w=card&id 单卡窗：无边框、原生拖动(startDragging)、📌=alwaysOnTop、窗口几何独立存档
+ * 数据：与网页版同一个 localStorage(STORE_KEY)；单卡窗写入采用 read-merge-write
+ * ============================================================ */
+(() => {
+  const T = window.__TAURI__;
+  if (!T) return;                                  // 纯浏览器/线上版：整层旁路
+  const qs = new URLSearchParams(location.search);
+  const MODE = qs.get('w');                        // 'daemon' | 'card' | null
+  const MID = qs.get('id') || '';
+  const focusFirst = qs.get('focus') === '1';
+  const EV = T.event, WIN = T.window, CORE = T.core;
+  const cur = WIN.getCurrentWindow();
+  const WK = pid => 'sticky-win:' + pid;           // 物理屏幕几何（逻辑px）
+  const LS = {
+    get: k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+    set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  };
+  let applyStoreSync = function () {};              // 模式块覆写
+  /* WebView2 跨窗 storage 事件在部分隔离模式不触发 → 轻量轮询兜底（本地数据，代价可忽略） */
+  let _raw = localStorage.getItem(STORE_KEY);
+  addEventListener('storage', e => { if (e.key === STORE_KEY) onRemoteStore(); });
+  setInterval(() => { const r = localStorage.getItem(STORE_KEY); if (r !== _raw) onRemoteStore(); }, 2500);
+  function onRemoteStore() { _raw = localStorage.getItem(STORE_KEY); applyStoreSync(); }
+
+  /* 原生通知：base 内联使用 new Notification(...)——构造器猴补丁转接 Tauri 通知插件 */
+  const TAURINotification = function (title, opts) {
+    CORE.invoke('plugin:notification|notify', { title, body: (opts && opts.body) || '', tag: (opts && opts.tag) || 'sticky' }).catch(() => {});
+    this.onclick = null; this.close = function () {};
+  };
+  TAURINotification.permission = 'granted';
+  TAURINotification.requestPermission = () => Promise.resolve('granted');
+  window.Notification = TAURINotification;
+
+  /* ---------- 开窗（两端可用） ---------- */
+  async function ensureCardWindow(n, focus) {
+    if (!n || n.archived) return;
+    const label = 'card-' + n.id;
+    try {
+      const ex = WIN.WebviewWindow.getByLabel(label);
+      if (ex) { if (focus) { await ex.unminimize().catch(() => {}); await ex.show().catch(() => {}); await ex.setFocus().catch(() => {}); } return; }
+    } catch (e) {}
+    const g = LS.get(WK(n.id)) || {};
+    const logicalH = n.collapsed ? 38 : Math.max(60, g.wh || n.h || 240);
+    try {
+      const w = new WIN.WebviewWindow(label, Object.assign({
+        url: 'index.html?w=card&id=' + n.id + (focus ? '&focus=1' : ''),
+        title: plainTitle(n.text) || '便签',
+        width: Math.max(140, g.ww || n.w || 260), height: logicalH,
+        x: g.wx, y: g.wy,
+        decorations: false, transparent: false, shadow: false,
+        resizable: true, maximizable: false, minimizable: true, closable: true,
+        alwaysOnTop: !!n.pinned, skipTaskbar: false, visible: false, focus: false,
+      }, (g.wx !== undefined && g.wy !== undefined) ? { x: g.wx, y: g.wy } : {}));
+      w.once('tauri://error', () => {});
+    } catch (e) { console.warn('spawn card window failed', e); }
+  }
+
+  /* ---------- 卡片几何独立档：窗口位置/尺寸 ↔ sticky-win:<id> ---------- */
+  async function persistGeo() {
+    if (MODE !== 'card') return;
+    try {
+      const [p, s, f] = [await cur.outerPosition(), await cur.outerSize(), (await cur.scaleFactor().catch(() => 1)) || 1];
+      LS.set(WK(MID), { wx: Math.round(p.x / f), wy: Math.round(p.y / f), ww: Math.round(s.width / f), wh: Math.round(s.height / f) });
+    } catch (e) {}
+  }
+
+  /* ================= 单卡窗模式 ================= */
+  if (MODE === 'card') {
+    document.documentElement.dataset.w = 'card';
+    const mine0 = getNote(MID);
+    if (!mine0) { cur.destroy().catch(() => {}); return; }
+    /* 远端数据变化 → 同步本卡 chrome（编辑中不打断） */
+    applyStoreSync = function () {
+      const d = LS.get(STORE_KEY); if (!d || !d.notes) return;
+      const mine = d.notes.find(n => n.id === MID);
+      if (!mine) { cur.destroy().catch(() => {}); return; }
+      state.notes = [mine];
+      try { syncChrome(mine); if (mine.remindAt) syncMD(mine); } catch (e) {}
+    };
+    /* 隐藏墙面 UI：工具栏/底架/帮助入口（卡片即窗口） */
+    const st = document.createElement('style');
+    st.textContent = 'html[data-w="card"] .bar:not(#toolbar .bar){}' +
+      'html[data-w="card"] #toolbar,html[data-w="card"] #shelf{display:none!important}' +
+      'html[data-w="card"] .canvas{inset:0!important}' +
+      'html[data-w="card"] .note{position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;max-width:none;max-height:none;border-radius:10px;box-shadow:none}' +
+      '.note{user-select:text}';
+    document.head.appendChild(st);
+    state.notes = [mine0]; state.edges = [];
+    renderAll();
+    drawEdges = noopDraw; function noopDraw() {}
+
+    /* 原生标题栏拖动：接管自绘 dragify */
+    const q = noteEls.get(MID)._q;
+    q.grip.addEventListener('pointerdown', e => {
+      if (e.button > 0) return;
+      if (e.target.closest('.note-menu,.note-fold,.note-pin-btn,.note-theme-btn,.note-save-btn')) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      cur.startDragging().catch(() => {});
+    }, true);
+    let geoT = null;
+    const queueGeo = () => { clearTimeout(geoT); geoT = setTimeout(persistGeo, 420); };
+    (async () => { try { await cur.listen('tauri://moved', queueGeo); await cur.listen('tauri://resized', queueGeo); } catch (e) {} })();
+    queueGeo();
+
+    /* 单卡写入：read-merge-write，绝不覆盖他卡 */
+    saveNow = function () {
+      clearTimeout(saveTimer); saveTimer = null;
+      try {
+        const d = LS.get(STORE_KEY) || { schema: 4, notes: [], theme: null, edges: [], syntax: 'off' };
+        if (!Array.isArray(d.notes)) d.notes = [];
+        const mine = state.notes[0]; if (!mine) return;
+        let hit = false;
+        d.notes = d.notes.map(n => { if (n.id === mine.id) { hit = true; return JSON.parse(JSON.stringify(mine)); } return n; });
+        if (!hit) d.notes.push(JSON.parse(JSON.stringify(mine)));
+        LS.set(STORE_KEY, d);
+      } catch (e) { try { toast('保存失败：存储配额不足', { warn: true }); } catch (e2) {} }
+    };
+
+    /* 结构操作 → 转发 daemon（新建/复制）；本卡可自处理：归档/删除/恢复 */
+    const _create = createNote; createNote = function () { EV.emit('win:new', MID).catch(() => {}); };
+    const _dup = duplicateNote; duplicateNote = function (n) { EV.emit('win:dup', (n && n.id) || n).catch(() => {}); };
+    document.getElementById('btn-new') && document.getElementById('btn-new').addEventListener('click', e => { e.stopImmediatePropagation(); e.preventDefault(); EV.emit('win:new', MID).catch(() => {}); }, true);
+    const _pinOrig = togglePin; togglePin = function (m) { const on = _pinOrig(m); cur.setAlwaysOnTop(!!on).catch(() => {}); return on; };
+    const _foldOrig = toggleFold; toggleFold = async function (m) {
+      _foldOrig(m);
+      try {
+        const g = LS.get(WK(MID)) || {};
+        const w = Math.max(140, g.ww || m.w || 260);
+        await cur.setSize(new WIN.LogicalSize(w, m.collapsed ? 38 : Math.max(60, g.whRestore || m.hExp || m.h || 240)));
+      } catch (e) {}
+      persistGeo();
+    };
+    /* 记录折叠前高度，供展开时恢复 */
+    addEventListener('input', () => { const n2 = state.notes[0]; if (n2 && !n2.collapsed) { const g = LS.get(WK(MID)) || {}; if (g.wh) { g.whRestore = g.wh; LS.set(WK(MID), g); } } }, true);
+    const _archOrig = archiveOne; archiveOne = function (id) { const r = _archOrig(id); saveNow(); if (id === MID) setTimeout(() => cur.destroy().catch(() => {}), 80); return r; };
+    const _delOrig = deleteNote; deleteNote = function (id) { const r = _delOrig(id); saveNow(); if (id === MID) setTimeout(() => cur.destroy().catch(() => {}), 80); return r; };
+    const _restOrig = restoreOne; restoreOne = function (id) { const r = _restOrig(id); (async () => { const n2 = getNote(id); if (n2) await ensureCardWindow(n2, true); await persistGeo().catch(()=>{}); })(); return r; };
+    restoreAllArch = function () { /* 由 daemon 处理 */ EV.emit('win:restoreall', MID).catch(() => {}); };
+    /* Alt+F4 / 系统关闭 → 归档本卡（不留孤儿窗口） */
+    let closing = false;
+    (async () => { try {
+      await WIN.getCurrentWindow().onCloseRequested(async api => {
+        if (closing) return; closing = true;
+        try { api.preventDefault(); } catch (e) {}
+        try { _archOrig(MID); saveNow(); } catch (e) {}
+        await cur.destroy().catch(() => {});
+      });
+    } catch (e) {} })();
+    /* 开屏即同步置顶态与尺寸，完成首帧后再显形（防闪现整墙） */
+    (async () => { try { await cur.setAlwaysOnTop(!!(getNote(MID) && getNote(MID).pinned)); await cur.show(); if (focusFirst) await cur.setFocus(); } catch (e) { await cur.show().catch(() => {}); } })();
+    return;
+  }
+
+  /* ================= 守护窗模式 ================= */
+  if (MODE === 'daemon') {
+    applyStoreSync = function () {
+      try { load(); renderAll(); ensureWindows(); } catch (e) {}
+    };
+    /* 隐藏兜底：conf 已 visible:false；某些平台误显则移屏外 */
+    (async () => { try {
+      if (await cur.isVisible().catch(() => false)) {
+        await cur.setPosition(new WIN.PhysicalPosition(-32000, -32000)).catch(() => {});
+        await cur.setSize(new WIN.PhysicalSize(1, 1)).catch(() => {});
+      }
+    } catch (e) {} })();
+    const _crDaemon = createNote;
+    createNote = function () { const n = _crDaemon(); ensureCardWindow(n, true); return n; };
+    const _dupDaemon = duplicateNote;
+    duplicateNote = function (src) { const n = _dupDaemon(src); if (n) ensureCardWindow(getNote(n.id || n), true); return n; };
+    const _restoreDaemon = restoreOne;
+    restoreOne = function (id) { const r = _restoreDaemon(id); const n2 = getNote(id); if (n2) ensureCardWindow(n2, true); return r; };
+    async function ensureWindows() {
+      for (const n of wallNotes()) ensureCardWindow(n, false);
+    }
+    EV.listen('win:new', () => { createNote(); });
+    EV.listen('win:dup', e => { const src = getNote(e.payload); if (src) duplicateNote(src); });
+    EV.listen('win:restoreall', () => { restoreAllArch(); toast && toast('已全部放回墙面'); });
+    setTimeout(ensureWindows, 400);            // 开机恢复窗口布局
+    /* daemon 保存即权威全量写，但同步写窗口几何档（卡片消失时清理） */
+    const _snD = saveNow;
+    saveNow = function () {
+      _snD();
+      try {
+        _raw = localStorage.getItem(STORE_KEY);
+        const ids = new Set((LS.get(STORE_KEY).notes || []).map(n => 'sticky-win:' + n.id));
+        Object.keys(localStorage).filter(k => k.startsWith('sticky-win:')).forEach(k => { if (!ids.has(k)) localStorage.removeItem(k); });
+      } catch (e) {}
+    };
+  }
+})();
+
+</script>
+</body>
+</html>
