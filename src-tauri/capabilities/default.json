@@ -1,11 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "daemon + 动态 card-* 窗口权限",
-  "windows": ["main", "daemon", "card-*"],
+  "description": "daemon + panel + 动态 card-* 窗口权限",
+  "windows": ["main", "daemon", "panel", "card-*"],
   "permissions": [
     "core:default",
     "notification:default",
+    "core:window:default",
     "core:window:allow-set-always-on-top",
     "core:window:allow-set-size",
     "core:window:allow-set-position",
@@ -23,6 +24,8 @@
     "core:window:allow-is-visible",
     "core:window:allow-get-all-windows",
     "core:webview:default",
-    "core:webview:allow-create-webview-window"
+    "core:webview:allow-create-webview-window",
+    "core:webview:allow-get-all-webviews",
+    "core:path:default"
   ]
 }
