@@ -1,0 +1,39 @@
+name: build-windows-installer
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.toml') }}
+      - name: Install deps
+        run: npm install
+      - name: Build frontend (dist-web)
+        run: npm run web
+      - name: Generate icons
+        run: npx tauri icon src/app-icon.png
+      - name: Tauri build (NSIS + MSI)
+        run: npx tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: stickyboard-windows
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
