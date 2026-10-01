@@ -1,4 +1,4 @@
-// 深蓝随便签 StickyBoard · Tauri v2 外壳（v2：托盘增加「打开便签墙管理」诊断/管理入口）
+// 便签台 StickyBoard · Tauri v2 外壳（v3：面板为独立带标题栏窗）
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::{Emitter, Manager};
@@ -19,18 +19,19 @@ fn main() {
 
             let mut builder = TrayIconBuilder::new()
                 .menu(&menu)
-                .tooltip("便签台 StickyBoard")
+                .tooltip("深蓝随便签 StickyBoard")
                 .on_menu_event(|app, event| {
                     let Some(d) = app.get_webview_window("daemon") else { return };
                     match event.id().as_ref() {
                         "new" => { let _ = d.emit("tray-new", ()); }
                         "restore" => { let _ = d.emit("tray-restore", ()); }
                         "panel" => {
-                            let _ = d.unminimize();
-                            let _ = d.show();
-                            let _ = d.set_size(tauri::Size::Logical(tauri::LogicalSize::new(1100.0, 720.0)));
-                            let _ = d.center();
-                            let _ = d.set_focus();
+                            if let Some(w) = app.get_webview_window("panel") {
+                                let _ = w.unminimize();
+                                let _ = w.show();
+                                let _ = w.center();
+                                let _ = w.set_focus();
+                            }
                         }
                         "quit" => { app.exit(0); }
                         _ => {}
