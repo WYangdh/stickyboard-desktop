@@ -2,7 +2,7 @@ cargo-features = []
 
 [package]
 name = "stickyboard"
-version = "16.3.0"
+version = "16.3.1"
 description = "便签台 StickyBoard — 钉在 Windows 桌面上的便签"
 edition = "2021"
 
