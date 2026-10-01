@@ -1,4 +1,4 @@
-// 便签台 StickyBoard · Tauri v2 外壳
+// 深蓝随便签 StickyBoard · Tauri v2 外壳
 // 职责：注册通知插件 + 系统托盘（新建/全部放回/退出），其余全在前端 daemon 窗
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -17,24 +17,24 @@ fn main() {
             let quit_i = MenuItem::with_id(handle, "quit", "退出便签台", true, None::<&str>)?;
             let menu = Menu::with_items(handle, &[&new_i, &back_i, &sep, &quit_i])?;
 
-            #[allow(unused_variables)]
-            let tray = TrayIconBuilder::new()
+            let mut builder = TrayIconBuilder::new()
                 .menu(&menu)
                 .tooltip("便签台 StickyBoard")
                 .on_menu_event(|app, event| {
                     if let Some(d) = app.get_webview_window("daemon") {
-                        match event.id.as_ref() {
+                        // tauri 2.x：事件 id 走访问器（字段形式在新版已私有化）
+                        match event.id().as_ref() {
                             "new" => { let _ = d.emit("tray-new", ()); }
                             "restore" => { let _ = d.emit("tray-restore", ()); }
                             "quit" => { app.exit(0); }
                             _ => {}
                         }
                     }
-                })
-                .build(app)?;
+                });
             if let Some(icon) = app.default_window_icon() {
-                let _ = tray.set_icon(Some(icon.clone()));
+                builder = builder.icon(icon.clone());
             }
+            let _tray = builder.build(app)?;
             Ok(())
         })
         .run(tauri::generate_context!())
